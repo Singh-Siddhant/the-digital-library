@@ -1,0 +1,80 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'majorguru09@gmail.com' ||
+        getUserData().role == 'admin'
+      );
+    }
+
+    function isCyber() {
+      return isSignedIn() && getUserData().role == 'cyber';
+    }
+
+    // 1. Users Collection
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow list: if isAdmin();
+      
+      // Let standard users create their profile, but roles default to 'user', plan to 'Free', expiry to 'N/A'
+      allow create: if isOwner(userId) && 
+                    request.resource.data.role == 'user' && 
+                    request.resource.data.planStatus == 'Free' &&
+                    request.resource.data.expiryDate == 'N/A';
+      
+      // Users can modify fields like name/avatar, but CANNOT self-escalate role, planStatus, or expiryDate
+      allow update: if isOwner(userId) && (
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'planStatus', 'expiryDate'])
+      ) || isAdmin();
+    }
+
+    // 2. Resources Collection (notes, PYQs)
+    match /resources/{resId} {
+      allow read: if resource.data.isVerified == true || 
+                     isAdmin() || 
+                     isCyber() || 
+                     (isSignedIn() && resource.data.uploadedBy == request.auth.uid);
+      
+      // Admins have full access. Regular signed in users can create unverified entries
+      allow create: if isSignedIn() && 
+                    request.resource.data.isVerified == false &&
+                    request.resource.data.uploadedBy == request.auth.uid;
+                    
+      allow update, delete: if isAdmin() || (isSignedIn() && resource.data.uploadedBy == request.auth.uid && request.resource.data.isVerified == false);
+    }
+
+    // 3. Purchases Collection
+    match /purchases/{purchaseId} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      // Users can write purchases, but can only set userId to their own UID
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // 4. Jobs Collection
+    match /jobs/{jobId} {
+      allow read: if true; // Public listings
+      allow write: if isAdmin();
+    }
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "admin"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "email", "role"]
+    },
+    "Resource": {
+      "title": "Resource",
+      "description": "Educational resource (notes, PYQ, etc.)",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "fileUrl": { "type": "string" },
+        "fileName": { "type": "string" },
+        "textContent": { "type": "string" },
+        "uploadedBy": { "type": "string" },
+        "uploaderName": { "type": "string" },
+        "category": { "type": "string" },
+        "branch": { "type": "string" },
+        "resourceType": { "type": "string", "enum": ["note", "pyq"] },
+        "contentType": { "type": "string", "enum": ["link", "pdf", "pdf-gdrive", "video", "video-gdrive", "text"] },
+        "isVerified": { "type": "boolean" },
+        "isPaid": { "type": "boolean" },
+        "price": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "uploadedBy", "category", "resourceType", "contentType", "isVerified"]
+    },
+    "Job": {
+      "title": "Job",
+      "description": "Job or Internship update",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "company": { "type": "string" },
+        "description": { "type": "string" },
+        "applyLink": { "type": "string" },
+        "year": { "type": "string" },
+        "type": { "type": "string", "enum": ["job", "intern"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "company", "applyLink", "year"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "Individual user profiles"
+    },
+    "resources/{resourceId}": {
+      "schema": "Resource",
+      "description": "Study materials"
+    },
+    "jobs/{jobId}": {
+      "schema": "Job",
+      "description": "Job openings"
+    }
+  }
+}

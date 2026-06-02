@@ -1,0 +1,13 @@
+{
+  "/_not-found/page": "/_not-found",
+  "/api/jobs/route": "/api/jobs",
+  "/api/auth/session/route": "/api/auth/session",
+  "/api/resource/[id]/route": "/api/resource/[id]",
+  "/admin/page": "/admin",
+  "/jobs/page": "/jobs",
+  "/login/page": "/login",
+  "/explore/page": "/explore",
+  "/donate/page": "/donate",
+  "/upload/page": "/upload",
+  "/page": "/"
+}

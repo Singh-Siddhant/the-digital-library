@@ -1,0 +1,66 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Outfit", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+@layer base {
+  body {
+    @apply bg-[#05060B] text-slate-200 font-sans antialiased;
+  }
+}
+
+@layer components {
+  .immersive-bg {
+    background: radial-gradient(circle at top, #0F121F 0%, #05060B 100%);
+    @apply min-h-screen relative overflow-hidden;
+  }
+
+  .glass-nav {
+    @apply bg-[#0A0C16]/80 backdrop-blur-md border-b border-white/5;
+  }
+
+  .glass-sidebar {
+    @apply bg-[#070912] border-r border-white/5;
+  }
+
+  .glass-card {
+    @apply bg-white/[0.03] backdrop-blur-sm border border-white/10 rounded-2xl transition-all duration-300;
+  }
+
+  .glass-card:hover {
+    @apply bg-white/[0.05] border-white/20;
+  }
+
+  .neon-glow-cyan {
+    @apply shadow-[0_0_15px_rgba(34,211,238,0.2)];
+  }
+
+  .neon-glow-purple {
+    @apply shadow-[0_0_15px_rgba(168,85,247,0.2)];
+  }
+
+  .accent-cyan {
+    @apply text-cyan-400 bg-cyan-400/5 border border-cyan-400/20;
+  }
+
+  .ambient-glow-1 {
+    @apply absolute top-0 right-0 w-[500px] h-[500px] bg-blue-600/5 blur-[120px] pointer-events-none;
+  }
+
+  .ambient-glow-2 {
+    @apply absolute bottom-0 left-0 w-[400px] h-[400px] bg-cyan-600/5 blur-[100px] pointer-events-none;
+  }
+}
+
+/* Custom styles to prevent layout shifts */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

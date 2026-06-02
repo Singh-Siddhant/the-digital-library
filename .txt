@@ -1,0 +1,17 @@
+Dashboard:
+
+username 
+courses purchased:
+    Access Link
+    Status [Verified, Unverified]
+Job preference
+
+Admin:
+
+Total courses
+Total students
+Total courses purchased
+Total courses completed
+Overview 
+
+
