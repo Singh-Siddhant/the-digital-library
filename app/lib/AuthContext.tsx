@@ -65,36 +65,55 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(firebaseUser);
       
       if (firebaseUser) {
-        // Real-time Firestore sync of user profile
-        const userRef = doc(db, 'users', firebaseUser.uid);
-        
-        // Initial setup for new user if document doesn't exist
-        const docSnap = await getDoc(userRef);
-        if (!docSnap.exists()) {
-          const bootstrapAdmins = ['majorguru09@gmail.com'];
-          const isBootstrapAdmin = bootstrapAdmins.includes(firebaseUser.email || '');
+        try {
+          // Real-time Firestore sync of user profile
+          const userRef = doc(db, 'users', firebaseUser.uid);
           
-          await setDoc(userRef, {
+          // Initial setup for new user if document doesn't exist
+          const docSnap = await getDoc(userRef);
+          if (!docSnap.exists()) {
+            const bootstrapAdmins = ['majorguru09@gmail.com'];
+            const isBootstrapAdmin = bootstrapAdmins.includes(firebaseUser.email || '');
+            
+            await setDoc(userRef, {
+              uid: firebaseUser.uid,
+              name: firebaseUser.displayName || 'Student',
+              email: firebaseUser.email || '',
+              picture: firebaseUser.photoURL || '',
+              role: isBootstrapAdmin ? 'admin' : 'user',
+              batch: 'AI/Cyber Prep',
+              planStatus: 'Free',
+              expiryDate: 'N/A',
+              createdAt: new Date().toISOString()
+            });
+          }
+
+          const unsubscribeProfile = onSnapshot(userRef, (snapshot) => {
+            if (snapshot.exists()) {
+              setUserProfile(snapshot.data() as UserProfile);
+            }
+            setLoading(false);
+          }, (err) => {
+            console.error("Firestore Profile Sync Error:", err);
+            setLoading(false);
+          });
+
+          return () => unsubscribeProfile();
+        } catch (err) {
+          console.error("Firebase Database Profile Initialization Error:", err);
+          // Set standard fallback profile so that the client page still renders and does not freeze
+          setUserProfile({
             uid: firebaseUser.uid,
             name: firebaseUser.displayName || 'Student',
             email: firebaseUser.email || '',
             picture: firebaseUser.photoURL || '',
-            role: isBootstrapAdmin ? 'admin' : 'user',
+            role: 'user',
             batch: 'AI/Cyber Prep',
             planStatus: 'Free',
-            expiryDate: 'N/A',
-            createdAt: new Date().toISOString()
+            expiryDate: 'N/A'
           });
-        }
-
-        const unsubscribeProfile = onSnapshot(userRef, (snapshot) => {
-          if (snapshot.exists()) {
-            setUserProfile(snapshot.data() as UserProfile);
-          }
           setLoading(false);
-        });
-
-        return () => unsubscribeProfile();
+        }
       } else {
         setUserProfile(null);
         setLoading(false);
