@@ -3,11 +3,17 @@ import firebaseConfig from '../../firebase-applet-config.json';
 
 if (!admin.apps.length) {
   const privateKey = process.env.FIREBASE_PRIVATE_KEY 
-    ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') 
+    ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n').replace(/"/g, '') 
     : undefined;
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
 
-  if (privateKey && clientEmail) {
+  const isPlaceholder = !privateKey || 
+                        privateKey.includes('...') || 
+                        privateKey.includes('your-service-account') ||
+                        !clientEmail || 
+                        clientEmail.includes('your-service-account');
+
+  if (privateKey && clientEmail && !isPlaceholder) {
     admin.initializeApp({
       credential: admin.credential.cert({
         projectId: firebaseConfig.projectId,
