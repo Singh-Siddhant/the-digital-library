@@ -148,11 +148,12 @@ function ExploreContent() {
     try {
       const q = query(
         collection(db, 'resources'),
-        where('isVerified', '==', true),
-        orderBy('createdAt', 'desc')
+        where('isVerified', '==', true)
       );
       const snapshot = await getDocs(q);
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      // Sort manually by createdAt desc to bypass index limits
+      data.sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
       setResources(data);
     } catch (err) {
       console.error("Error fetching resources:", err);
