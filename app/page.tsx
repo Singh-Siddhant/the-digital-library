@@ -121,12 +121,18 @@ export default function AdminConsoleHome() {
   const bootstrapAdmins = ['majorguru09@gmail.com', '2024021271@mmmut.ac.in'];
   const isAuthorizedAdmin = user && (bootstrapAdmins.includes(user.email || '') || userProfile?.role === 'admin');
 
-  // Trigger data fetching on tab switch or authorization
+  // Trigger data fetching on authorization and tab switch
   useEffect(() => {
     if (isAuthorizedAdmin) {
-      fetchDataForTab();
+      fetchAllData();
     }
-  }, [isAuthorizedAdmin, activeTab]);
+  }, [isAuthorizedAdmin]);
+
+  useEffect(() => {
+    if (isAuthorizedAdmin && activeTab === 'jobs') {
+      fetchJobsList();
+    }
+  }, [activeTab, isAuthorizedAdmin]);
 
   // Google Login Initialization
   useEffect(() => {
@@ -173,38 +179,46 @@ export default function AdminConsoleHome() {
     }
   };
 
-  const fetchDataForTab = async () => {
+  const fetchJobsList = async () => {
+    setLoadingJobsList(true);
+    try {
+      const response = await axios.get('/api/jobs');
+      setActiveJobsList(response.data);
+    } catch (err) {
+      console.error("Error loading placement updates list:", err);
+    } finally {
+      setLoadingJobsList(false);
+    }
+  };
+
+  const fetchAllData = async () => {
     setLoading(true);
     try {
-      if (activeTab === 'verification') {
-        const qPending = query(collection(db, 'resources'), where('isVerified', '==', false));
-        const snap = await getDocs(qPending);
-        setPendingResources(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      } else if (activeTab === 'resources') {
-        const qVerified = query(collection(db, 'resources'), where('isVerified', '==', true), orderBy('createdAt', 'desc'));
-        const snap = await getDocs(qVerified);
-        setVerifiedResources(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      } else if (activeTab === 'jobs') {
-        setLoadingJobsList(true);
-        try {
-          const response = await axios.get('/api/jobs');
-          setActiveJobsList(response.data);
-        } catch (err) {
-          console.error("Error loading placement updates list:", err);
-        } finally {
-          setLoadingJobsList(false);
-        }
-      } else if (activeTab === 'users') {
-        const qUsers = collection(db, 'users');
-        const snap = await getDocs(qUsers);
-        setUsers(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      } else if (activeTab === 'payments') {
-        const qPayments = query(collection(db, 'paymentRequests'), where('status', '==', 'pending'));
-        const snap = await getDocs(qPayments);
-        setPendingPayments(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      }
+      const qPending = query(collection(db, 'resources'), where('isVerified', '==', false));
+      // Bypassing composite index requirement by sorting verified resources client-side
+      const qVerified = query(collection(db, 'resources'), where('isVerified', '==', true));
+      const qUsers = collection(db, 'users');
+      const qPayments = query(collection(db, 'paymentRequests'), where('status', '==', 'pending'));
+
+      const [snapPending, snapVerified, snapUsers, snapPayments] = await Promise.all([
+        getDocs(qPending),
+        getDocs(qVerified),
+        getDocs(qUsers),
+        getDocs(qPayments)
+      ]);
+
+      setPendingResources(snapPending.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      
+      const verifiedData = snapVerified.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      verifiedData.sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+      setVerifiedResources(verifiedData);
+      
+      setUsers(snapUsers.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setPendingPayments(snapPayments.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+
+      fetchJobsList();
     } catch (err) {
-      console.error("Error loading tab data:", err);
+      console.error("Error loading dashboard data:", err);
     } finally {
       setLoading(false);
     }
@@ -445,7 +459,7 @@ export default function AdminConsoleHome() {
       setJobCompany('');
       setJobApplyLink('');
       // Reload placements list
-      fetchDataForTab();
+      fetchJobsList();
     } catch (err: any) {
       console.error(err);
       alert('Sheet sync failed. Check your Apps Script environment configuration.');
@@ -673,7 +687,59 @@ export default function AdminConsoleHome() {
             <h1 className="text-3xl font-display font-bold text-white mb-2">Systems Management</h1>
             <p className="text-slate-500 text-sm">Review student files, edit library resource nodes, post placement openings, and assign user subscriptions.</p>
           </div>
+        </div>
 
+        {/* Top Stats Overview Panel */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+          <div className="glass-card p-6 flex items-center justify-between border-l-4 border-l-cyan-500">
+            <div>
+              <span className="text-[10px] uppercase font-bold tracking-widest text-slate-500">Total Library Modules</span>
+              <h2 className="text-3xl font-display font-bold text-white mt-1">{verifiedResources.length}</h2>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center">
+              <BookOpen size={20} />
+            </div>
+          </div>
+          
+          <div className="glass-card p-6 flex items-center justify-between border-l-4 border-l-purple-500">
+            <div>
+              <span className="text-[10px] uppercase font-bold tracking-widest text-slate-500">Registered Students</span>
+              <h2 className="text-3xl font-display font-bold text-white mt-1">{users.length}</h2>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center">
+              <Users size={20} />
+            </div>
+          </div>
+
+          <div className="glass-card p-6 flex items-center justify-between border-l-4 border-l-emerald-500">
+            <div>
+              <span className="text-[10px] uppercase font-bold tracking-widest text-slate-500">Paid Subscriptions</span>
+              <h2 className="text-3xl font-display font-bold text-white mt-1">
+                {users.filter(u => u.planStatus === 'Paid').length}
+              </h2>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
+              <Coins size={20} />
+            </div>
+          </div>
+
+          <div className="glass-card p-6 flex items-center justify-between border-l-4 border-l-amber-500">
+            <div>
+              <span className="text-[10px] uppercase font-bold tracking-widest text-slate-500">Pending Actions</span>
+              <h2 className="text-3xl font-display font-bold text-white mt-1">
+                {pendingResources.length + pendingPayments.length}
+              </h2>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center">
+              <AlertCircle size={20} />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6 mb-12 border-b border-white/5 pb-8">
+          <div className="hidden xl:block">
+            <h2 className="text-sm font-bold uppercase tracking-widest text-slate-500">Control Panels</h2>
+          </div>
           {/* Core Admin Tab List */}
           <div className="flex flex-wrap bg-white/5 border border-white/10 rounded-xl p-1 shrink-0 gap-1">
             <button onClick={() => setActiveTab('verification')} className={tabClass('verification')}>
