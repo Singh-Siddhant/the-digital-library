@@ -110,6 +110,12 @@ export default function AdminConsoleHome() {
   // Tab 6: Payment / Membership Activations states
   const [pendingPayments, setPendingPayments] = useState<any[]>([]);
   const [paymentActionLoading, setPaymentActionLoading] = useState<string | null>(null);
+  const [paymentsFilter, setPaymentsFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
+
+  const filteredPayments = React.useMemo(() => {
+    if (paymentsFilter === 'all') return pendingPayments;
+    return pendingPayments.filter(p => p.status === paymentsFilter);
+  }, [pendingPayments, paymentsFilter]);
 
   // Shared constants
   const categories = ["GATE", "RRB", "SSC", "CAT", "UPSC", "Placement Prep", "Semester Notes"];
@@ -198,7 +204,7 @@ export default function AdminConsoleHome() {
       // Bypassing composite index requirement by sorting verified resources client-side
       const qVerified = query(collection(db, 'resources'), where('isVerified', '==', true));
       const qUsers = collection(db, 'users');
-      const qPayments = query(collection(db, 'paymentRequests'), where('status', '==', 'pending'));
+      const qPayments = collection(db, 'paymentRequests');
 
       const [snapPending, snapVerified, snapUsers, snapPayments] = await Promise.all([
         getDocs(qPending),
@@ -214,7 +220,11 @@ export default function AdminConsoleHome() {
       setVerifiedResources(verifiedData);
       
       setUsers(snapUsers.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      setPendingPayments(snapPayments.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      
+      // Map and sort payment requests client-side by date
+      const paymentsData = snapPayments.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      paymentsData.sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+      setPendingPayments(paymentsData);
 
       fetchJobsList();
     } catch (err) {
@@ -727,7 +737,7 @@ export default function AdminConsoleHome() {
             <div>
               <span className="text-[10px] uppercase font-bold tracking-widest text-slate-500">Pending Actions</span>
               <h2 className="text-3xl font-display font-bold text-white mt-1">
-                {pendingResources.length + pendingPayments.length}
+                {pendingResources.length + pendingPayments.filter(p => p.status === 'pending').length}
               </h2>
             </div>
             <div className="w-12 h-12 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center">
@@ -746,7 +756,7 @@ export default function AdminConsoleHome() {
               <FileCheck size={14} /> Pending ({pendingResources.length})
             </button>
             <button onClick={() => setActiveTab('payments')} className={tabClass('payments')}>
-              <Coins size={14} /> Payments ({pendingPayments.length})
+              <Coins size={14} /> Payments ({pendingPayments.filter(p => p.status === 'pending').length})
             </button>
             <button onClick={() => setActiveTab('resources')} className={tabClass('resources')}>
               <FolderLock size={14} /> Manage Resources ({verifiedResources.length})
@@ -1375,18 +1385,48 @@ export default function AdminConsoleHome() {
             {/* TAB 6: PAYMENTS & MEMBERSHIP ACTIVATIONS QUEUE */}
             {activeTab === 'payments' && (
               <div className="space-y-6">
-                {pendingPayments.length === 0 ? (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/5 pb-4">
+                  <div>
+                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                      <Coins className="text-cyan-400" size={18} /> Payments Verification Queue
+                    </h2>
+                    <p className="text-[10px] text-slate-500">Review, approve, or decline subscription and file payment requests.</p>
+                  </div>
+
+                  <div className="flex bg-white/5 border border-white/10 rounded-lg p-0.5 shrink-0 text-[10px] font-bold uppercase tracking-wider gap-0.5">
+                    {(['all', 'pending', 'approved', 'rejected'] as const).map(status => (
+                      <button
+                        key={status}
+                        type="button"
+                        onClick={() => setPaymentsFilter(status)}
+                        className={`px-3 py-1.5 rounded cursor-pointer transition-all ${paymentsFilter === status ? 'bg-cyan-500 text-black font-bold' : 'text-slate-400 hover:text-white'}`}
+                      >
+                        {status}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {filteredPayments.length === 0 ? (
                   <div className="text-center py-20 glass-card">
-                    <p className="text-slate-500 text-sm">No payment activations pending in verification queue.</p>
+                    <p className="text-slate-500 text-sm">No payment requests found for this filter.</p>
                   </div>
                 ) : (
                   <div className="grid gap-6">
-                    {pendingPayments.map((req) => {
+                    {filteredPayments.map((req) => {
                       const isResource = req.type === 'resource' || req.resourceId;
                       const isPendingAction = paymentActionLoading === req.id;
+                      const isPending = req.status === 'pending' || !req.status;
                       
                       return (
-                        <div key={req.id} className="glass-card p-6 flex flex-col md:flex-row md:items-center justify-between gap-6 border-l-4 border-l-amber-500">
+                        <div 
+                          key={req.id} 
+                          className={`glass-card p-6 flex flex-col md:flex-row md:items-center justify-between gap-6 border-l-4 ${
+                            req.status === 'approved' ? 'border-l-emerald-500' :
+                            req.status === 'rejected' ? 'border-l-red-500' :
+                            'border-l-amber-500'
+                          }`}
+                        >
                           <div className="flex-grow">
                             <div className="flex items-center gap-3 mb-2">
                               <span className="px-2.5 py-0.5 rounded bg-amber-400/10 text-amber-400 text-[9px] font-bold uppercase tracking-wider border border-amber-400/10">
@@ -1394,6 +1434,13 @@ export default function AdminConsoleHome() {
                               </span>
                               <span className="text-slate-600 font-mono text-[10px]">
                                 Submitted: {new Date(req.createdAt).toLocaleString()}
+                              </span>
+                              <span className={`px-2 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider font-mono ${
+                                req.status === 'approved' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/10' :
+                                req.status === 'rejected' ? 'bg-red-500/10 text-red-400 border border-red-500/10' :
+                                'bg-orange-500/10 text-orange-400 border border-orange-500/10'
+                              }`}>
+                                {req.status || 'pending'}
                               </span>
                             </div>
                             
@@ -1421,22 +1468,24 @@ export default function AdminConsoleHome() {
                             </div>
                           </div>
                           
-                          <div className="flex gap-3 pt-4 border-t md:border-t-0 border-white/5 shrink-0">
-                            <button 
-                              disabled={isPendingAction}
-                              onClick={() => handlePaymentVerification(req, true)} 
-                              className="px-4 py-2.5 bg-emerald-600/10 text-emerald-400 hover:bg-emerald-600 hover:text-white rounded-xl border border-emerald-500/20 hover:border-emerald-500 font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
-                            >
-                              {isPendingAction ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Approve & Upgrade
-                            </button>
-                            <button 
-                              disabled={isPendingAction}
-                              onClick={() => handlePaymentVerification(req, false)} 
-                              className="px-4 py-2.5 bg-red-600/10 text-red-400 hover:bg-red-600 hover:text-white rounded-xl border border-red-500/20 hover:border-red-500 font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
-                            >
-                              {isPendingAction ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />} Decline
-                            </button>
-                          </div>
+                          {isPending && (
+                            <div className="flex gap-3 pt-4 border-t md:border-t-0 border-white/5 shrink-0">
+                              <button 
+                                disabled={isPendingAction}
+                                onClick={() => handlePaymentVerification(req, true)} 
+                                className="px-4 py-2.5 bg-emerald-600/10 text-emerald-400 hover:bg-emerald-600 hover:text-white rounded-xl border border-emerald-500/20 hover:border-emerald-500 font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                              >
+                                {isPendingAction ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Approve & Upgrade
+                              </button>
+                              <button 
+                                disabled={isPendingAction}
+                                onClick={() => handlePaymentVerification(req, false)} 
+                                className="px-4 py-2.5 bg-red-600/10 text-red-400 hover:bg-red-600 hover:text-white rounded-xl border border-red-500/20 hover:border-red-500 font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                              >
+                                {isPendingAction ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />} Decline
+                              </button>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
