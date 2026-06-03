@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import axios from 'axios';
 import { adminDb } from '../../lib/firebase-admin';
 
+// Public view link converted to CSV format for fast display reads
+const PUBLIC_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1VtiMY9i-q7moN1m0fifTnR7OsnxGzfHx2M3DUXWaInE/export?format=csv";
 const JOBS_SHEET_URL = process.env.JOBS_SHEET_URL || '';
 
 export async function GET(req: NextRequest) {
@@ -15,47 +17,41 @@ export async function GET(req: NextRequest) {
       console.error("Error reading jobs from Firestore:", e);
     }
 
-    // 2. Fetch from Google Sheets Apps Script (if configured)
+    // 2. Fetch directly from the public Google Sheet CSV URL (extremely fast & cached)
     let sheetJobs: any[] = [];
-    if (JOBS_SHEET_URL) {
-      try {
-        const response = await axios.get(JOBS_SHEET_URL, { timeout: 5000 });
-        if (JOBS_SHEET_URL.includes('output=csv')) {
-          const csvText = response.data as string;
-          const lines = csvText.split('\n');
-          for (let i = 1; i < lines.length; i++) {
-            if (!lines[i]) continue;
-            const columns = lines[i].split(',').map(c => c.trim().replace(/^"|"$/g, ''));
-            if (columns.length >= 5) {
-              sheetJobs.push({
-                id: `sheet-${i}-${columns[0].substring(0,3)}`,
-                title: columns[0],
-                company: columns[1],
-                year: columns[2],
-                type: columns[3] === 'intern' ? 'intern' : 'job',
-                applyLink: columns[4],
-                createdAt: new Date().toISOString()
-              });
-            }
-          }
-        } else {
-          sheetJobs = response.data || [];
+    try {
+      const response = await axios.get(PUBLIC_SHEET_CSV_URL, { timeout: 6000 });
+      const csvText = response.data as string;
+      const lines = csvText.split('\n');
+      
+      // Parse CSV lines (expecting columns: title, company, year, type, applyLink, createdAt)
+      for (let i = 1; i < lines.length; i++) {
+        if (!lines[i]) continue;
+        const columns = lines[i].split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+        if (columns.length >= 5) {
+          sheetJobs.push({
+            id: `sheet-${i}-${columns[0].substring(0,3)}`,
+            title: columns[0],
+            company: columns[1],
+            year: columns[2],
+            type: columns[3] === 'intern' ? 'intern' : 'job',
+            applyLink: columns[4],
+            createdAt: columns[5] || new Date().toISOString()
+          });
         }
-      } catch (err) {
-        console.error("Jobs Sheet URL Fetch Error:", err);
       }
+    } catch (err) {
+      console.error("Google Sheets public CSV fetch failed:", err);
     }
 
     // 3. Merge & Deduplicate
     const allJobsMap = new Map<string, any>();
     
-    // Process sheet jobs first (can be overwritten by Firestore entries for cleaner IDs/details)
     sheetJobs.forEach(job => {
       const key = `${job.title.toLowerCase().trim()}_${job.company.toLowerCase().trim()}`;
       allJobsMap.set(key, job);
     });
 
-    // Process firestore jobs (have priority)
     firestoreJobs.forEach(job => {
       const key = `${job.title.toLowerCase().trim()}_${job.company.toLowerCase().trim()}`;
       allJobsMap.set(key, job);
@@ -91,17 +87,19 @@ export async function POST(req: NextRequest) {
     // 1. Save to Firebase Firestore
     const docRef = await adminDb.collection('jobs').add(jobData);
 
-    // 2. Post to Google Sheets Apps Script (if configured)
+    // 2. Post to Google Sheets Apps Script URL for admin updates
     if (JOBS_SHEET_URL) {
       try {
         await axios.post(JOBS_SHEET_URL, jobData, {
           headers: { 'Content-Type': 'application/json' },
-          timeout: 5000
+          timeout: 6000
         });
       } catch (err) {
         console.error("Error pushing job to Apps Script sheet:", err);
-        // Do not fail the whole request since Firestore succeeded
+        // Do not fail Firestore since it completed
       }
+    } else {
+      console.warn("JOBS_SHEET_URL env variable not configured. Apps Script sheet bypass.");
     }
 
     return NextResponse.json({ status: 'success', id: docRef.id });
@@ -119,7 +117,6 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'Job ID is required' }, { status: 400 });
     }
 
-    // Delete from Firestore
     await adminDb.collection('jobs').doc(id).delete();
     return NextResponse.json({ status: 'success' });
   } catch (err: any) {
