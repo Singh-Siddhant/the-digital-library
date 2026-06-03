@@ -72,9 +72,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Real-time Firestore sync of user profile
           const userRef = doc(db, 'users', firebaseUser.uid);
           
-          // Initial setup for new user if document doesn't exist
+          // Initial setup for new user if document doesn't exist or is missing role field
           const docSnap = await getDoc(userRef);
-          if (!docSnap.exists()) {
+          const hasRole = docSnap.exists() && docSnap.data()?.role;
+          if (!hasRole) {
             const bootstrapAdmins = ['majorguru09@gmail.com'];
             const isBootstrapAdmin = bootstrapAdmins.includes(firebaseUser.email || '');
             
@@ -87,8 +88,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               batch: 'AI/Cyber Prep',
               planStatus: 'Free',
               expiryDate: 'N/A',
-              createdAt: new Date().toISOString()
-            });
+              createdAt: docSnap.exists() ? (docSnap.data()?.createdAt || new Date().toISOString()) : new Date().toISOString()
+            }, { merge: true });
           }
 
           const unsubscribeProfile = onSnapshot(userRef, (snapshot) => {
