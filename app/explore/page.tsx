@@ -14,7 +14,12 @@ import {
   LogOut, 
   Download, 
   Lock,
-  ChevronLeft
+  ChevronLeft,
+  Crown,
+  AlertCircle,
+  QrCode,
+  CheckCircle2,
+  Loader2
 } from 'lucide-react';
 import Link from 'next/link';
 import { Suspense } from 'react';
@@ -49,10 +54,23 @@ function ExploreContent() {
   
   const [viewingResource, setViewingResource] = useState<any>(null);
   const [purchasedResourceIds, setPurchasedResourceIds] = useState<string[]>([]);
+  
+  // Custom Payment Modal for Single Paid Resource
+  const [payModalResource, setPayModalResource] = useState<any>(null);
+  const [payName, setPayName] = useState('');
+  const [payTxnId, setPayTxnId] = useState('');
+  const [payLoading, setPayLoading] = useState(false);
+  const [paySuccess, setPaySuccess] = useState(false);
+  const [payError, setPayError] = useState('');
 
   // Security Flags
   const isCyber = userProfile?.role === 'cyber';
   const isAdmin = userProfile?.role === 'admin';
+  const isPremiumActive = userProfile?.planStatus === 'Paid' && (
+    !userProfile.expiryDate || 
+    userProfile.expiryDate === 'N/A' || 
+    new Date(userProfile.expiryDate).getTime() > Date.now()
+  );
 
   useEffect(() => {
     if (!user && !loading) {
@@ -80,6 +98,22 @@ function ExploreContent() {
       setPurchasedResourceIds([]);
     }
   }, [user]);
+
+  // Handle URL redirect query param to auto-open resource
+  useEffect(() => {
+    const targetId = searchParams?.get('id');
+    if (targetId && resources.length > 0) {
+      const targetRes = resources.find(r => r.id === targetId);
+      if (targetRes) {
+        const isUnlocked = isCyber || isAdmin || !targetRes.isPaid || isPremiumActive || purchasedResourceIds.includes(targetRes.id);
+        if (isUnlocked) {
+          setViewingResource(targetRes);
+        } else {
+          setPayModalResource(targetRes);
+        }
+      }
+    }
+  }, [searchParams, resources, purchasedResourceIds, isPremiumActive, isCyber, isAdmin]);
 
   useEffect(() => {
     const handleModalKeys = (e: KeyboardEvent) => {
@@ -150,42 +184,47 @@ function ExploreContent() {
     return matchesSearch && matchesCategory && matchesBranch && matchesSemester && matchesType;
   });
 
-  const handlePayment = (resource: any) => {
-    if (!user) return alert('Please login to purchase');
-    
-    if (typeof window === 'undefined' || !(window as any).Razorpay) {
-      alert('Razorpay payment gateway is loading. Try again in a few seconds.');
-      return;
-    }
+  const handleManualResourceRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return alert('Please login to request access.');
+    if (!payName.trim()) return setPayError('Name is required.');
+    if (!payTxnId.trim()) return setPayError('Transaction ID is required.');
 
-    const options = {
-      key: "rzp_test_placeholder",
-      amount: resource.price * 100,
-      currency: "INR",
-      name: "The Digital Library",
-      description: `Purchase ${resource.title}`,
-      handler: async function (response: any) {
-        try {
-          await addDoc(collection(db, 'purchases'), {
-            userId: user.uid,
-            resourceId: resource.id,
-            purchasedAt: new Date().toISOString()
-          });
-          alert('Payment Successful! Course Node resource unlocked.');
-          fetchPurchases();
-        } catch (err: any) {
-          console.error(err);
-          alert('Failed to register purchase database entry. Contact support.');
-        }
-      },
-      prefill: {
+    setPayLoading(true);
+    setPayError('');
+
+    try {
+      await addDoc(collection(db, 'paymentRequests'), {
+        userId: user.uid,
         email: user.email,
-        name: user.displayName || 'Student'
-      },
-      theme: { color: "#06b6d4" }
-    };
-    const rzp = new (window as any).Razorpay(options);
-    rzp.open();
+        fullName: payName.trim(),
+        resourceId: payModalResource.id,
+        resourceTitle: payModalResource.title,
+        amount: payModalResource.price,
+        transactionId: payTxnId.trim(),
+        status: 'pending',
+        type: 'resource',
+        createdAt: new Date().toISOString()
+      });
+
+      setPaySuccess(true);
+      setTimeout(() => {
+        setPaySuccess(false);
+        setPayModalResource(null);
+        setPayName('');
+        setPayTxnId('');
+      }, 3000);
+    } catch (err: any) {
+      setPayError(err.message || 'Failed to submit payment request.');
+    } finally {
+      setPayLoading(false);
+    }
+  };
+
+  const generateSimulatedTxn = () => {
+    const randomHex = Math.random().toString(36).substring(2, 10).toUpperCase();
+    const simulated = `TXN-RES-${randomHex}`;
+    setPayTxnId(simulated);
   };
 
   return (
@@ -214,6 +253,9 @@ function ExploreContent() {
               </Link>
               <Link href="/jobs" className="text-sm font-medium text-slate-400 hover:text-white transition-colors">
                 Job Updates
+              </Link>
+              <Link href="/premium" className="text-sm font-medium text-slate-400 hover:text-white transition-colors flex items-center gap-1 text-cyan-400">
+                <Crown size={14} className="animate-pulse" /> Premium
               </Link>
               <Link href="/donate" className="text-sm font-medium text-slate-400 hover:text-white transition-colors">
                 Support
@@ -350,7 +392,7 @@ function ExploreContent() {
               <AnimatePresence mode="popLayout">
                 {filteredResources.map((res) => {
                   const isPaid = res.isPaid;
-                  const isUnlocked = isCyber || isAdmin || !isPaid || purchasedResourceIds.includes(res.id);
+                  const isUnlocked = isCyber || isAdmin || !isPaid || isPremiumActive || purchasedResourceIds.includes(res.id);
 
                   return (
                     <motion.div
@@ -366,7 +408,7 @@ function ExploreContent() {
                         </div>
                         {isPaid && !isUnlocked && (
                           <span className="px-2 py-1 bg-orange-500/15 border border-orange-500/30 text-orange-400 rounded text-[9px] font-bold uppercase tracking-wider flex items-center gap-1">
-                            <Lock size={10} /> Paid Note
+                            <Lock size={10} /> Paid Reference
                           </span>
                         )}
                       </div>
@@ -382,10 +424,10 @@ function ExploreContent() {
                         </div>
                         {isPaid && !isUnlocked ? (
                           <button 
-                            onClick={() => handlePayment(res)} 
-                            className="px-5 py-2 rounded-lg bg-orange-500 text-white text-[10px] font-bold uppercase tracking-widest hover:bg-orange-400 transition-all cursor-pointer shadow-lg shadow-orange-500/20"
+                            onClick={() => setPayModalResource(res)} 
+                            className="px-5 py-2 rounded-lg bg-orange-505 bg-orange-600 text-white text-[10px] font-bold uppercase tracking-widest hover:bg-orange-500 transition-all cursor-pointer shadow-lg shadow-orange-600/20"
                           >
-                            BUY ₹{res.price}
+                            UNLOCK ₹{res.price}
                           </button>
                         ) : (
                           <button 
@@ -404,6 +446,115 @@ function ExploreContent() {
           </div>
         </main>
       </div>
+
+      {/* Unlock Resource Modal / UPI Request form */}
+      <AnimatePresence>
+        {payModalResource && (
+          <motion.div 
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.95 }} 
+              animate={{ scale: 1 }} 
+              exit={{ scale: 0.95 }}
+              className="max-w-md w-full glass-card p-8 border border-white/10 bg-[#0A0C16] relative overflow-hidden"
+            >
+              <button 
+                onClick={() => setPayModalResource(null)}
+                className="absolute top-4 right-4 text-slate-400 hover:text-white text-sm uppercase tracking-wider font-bold cursor-pointer"
+              >
+                Close
+              </button>
+
+              <div className="flex items-center gap-2 text-orange-400 mb-4">
+                <Lock size={20} />
+                <h3 className="text-xl font-bold">Unlock Study Resource</h3>
+              </div>
+              <p className="text-xs text-slate-400 mb-6">
+                You are requesting access to **{payModalResource.title}**. You can pay manually to activate access, or join **Premium** to unlock all resources.
+              </p>
+
+              {paySuccess ? (
+                <div className="p-6 text-center space-y-3">
+                  <div className="w-12 h-12 bg-emerald-500 rounded-full flex items-center justify-center mx-auto text-black">
+                    <CheckCircle2 size={24} />
+                  </div>
+                  <h4 className="text-sm font-bold text-white uppercase tracking-wider">Request Logged</h4>
+                  <p className="text-xs text-slate-400 font-mono">Reference pending admin verification. Tracking updates on your Dashboard.</p>
+                </div>
+              ) : (
+                <form onSubmit={handleManualResourceRequest} className="space-y-4">
+                  
+                  {/* UPI QR display */}
+                  <div className="p-4 rounded-xl bg-white/[0.01] border border-white/5 flex items-center gap-4">
+                    <QrCode size={70} className="bg-white p-1 rounded text-slate-900 shrink-0" />
+                    <div className="text-xs space-y-1 font-mono text-slate-400">
+                      <div>UPI ID: <strong className="text-white">majorguru09@okaxis</strong></div>
+                      <div>AMOUNT: <strong className="text-cyan-400">₹{payModalResource.price}.00</strong></div>
+                      <button 
+                        type="button" 
+                        onClick={generateSimulatedTxn}
+                        className="text-[9px] uppercase font-bold text-cyan-400 underline hover:text-cyan-300 block pt-1"
+                      >
+                        Simulate Payment Code
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] uppercase font-bold tracking-widest text-slate-500">Your Full Name</label>
+                    <input
+                      required
+                      type="text"
+                      placeholder="Siddhant Singh"
+                      value={payName}
+                      onChange={(e) => setPayName(e.target.value)}
+                      className="w-full h-10 px-3 bg-[#030408] border border-white/10 rounded-xl text-white outline-none focus:border-cyan-400 text-xs"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] uppercase font-bold tracking-widest text-slate-500">Transaction ID / UPI Reference</label>
+                    <input
+                      required
+                      type="text"
+                      placeholder="Paste UPI Reference Code"
+                      value={payTxnId}
+                      onChange={(e) => setPayTxnId(e.target.value)}
+                      className="w-full h-10 px-3 bg-[#030408] border border-white/10 rounded-xl text-white outline-none focus:border-cyan-400 font-mono text-xs"
+                    />
+                  </div>
+
+                  {payError && (
+                    <div className="flex items-center gap-1.5 text-red-500 font-bold uppercase tracking-wider text-[9px]">
+                      <AlertCircle size={12} /> {payError}
+                    </div>
+                  )}
+
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      type="submit"
+                      disabled={payLoading}
+                      className="flex-1 h-11 bg-orange-600 text-white font-bold rounded-xl hover:bg-orange-500 disabled:opacity-50 text-xs uppercase tracking-wider cursor-pointer"
+                    >
+                      {payLoading ? 'Submitting...' : 'Submit Txn ID'}
+                    </button>
+                    <Link
+                      href="/premium"
+                      className="flex-1 h-11 bg-cyan-500 text-black font-bold rounded-xl hover:bg-cyan-400 text-xs uppercase tracking-wider flex items-center justify-center cursor-pointer shadow-lg shadow-cyan-500/10"
+                    >
+                      Go Premium <Crown size={12} className="ml-1" />
+                    </Link>
+                  </div>
+                </form>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Secure Digital Reader Modal */}
       <AnimatePresence>
@@ -476,8 +627,6 @@ function ExploreContent() {
           </motion.div>
         )}
       </AnimatePresence>
-
-      <script src="https://checkout.razorpay.com/v1/checkout.js" async></script>
     </div>
   );
 }

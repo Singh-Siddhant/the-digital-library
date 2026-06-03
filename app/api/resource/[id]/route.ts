@@ -66,11 +66,39 @@ export async function GET(
       }
     }
 
-    // 5. Secure Streaming Proxy Logic (Google Drive Direct stream)
+    // 5. Secure Streaming Proxy Logic (Google Drive or Firebase Storage stream)
     const fileUrl = resource?.fileUrl || '';
     if (!fileUrl) {
       return NextResponse.json({ error: 'Invalid resource link URL' }, { status: 400 });
     }
+
+    // Stream from Firebase Storage securely if URL belongs to Firebase Storage
+    if (fileUrl.includes('firebasestorage.googleapis.com')) {
+      try {
+        const response = await axios({
+          method: 'get',
+          url: fileUrl,
+          responseType: 'stream',
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+          }
+        });
+
+        const contentType = String(response.headers['content-type'] || 'application/pdf');
+        
+        return new NextResponse(response.data as any, {
+          headers: {
+            'Content-Type': contentType,
+            'Content-Disposition': `inline; filename="${resource.title || 'secure-document'}"`,
+            'Cache-Control': 'no-store, max-age=0, must-revalidate',
+          }
+        });
+      } catch (e: any) {
+        console.error("Firebase Storage secure stream proxy issue:", e);
+        return NextResponse.json({ error: 'Failed to securely stream Firebase Storage file.' }, { status: 500 });
+      }
+    }
+
 
     // Extract File ID from Google Drive link
     const regD = /\/file\/d\/([a-zA-Z0-9_-]+)/;

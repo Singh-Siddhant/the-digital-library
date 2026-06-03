@@ -24,7 +24,9 @@ export interface UserProfile {
   branch?: string;
   targetedExam?: string;
   semester?: string;
+  username?: string;
 }
+
 
 interface AuthContextType {
   user: User | null;
