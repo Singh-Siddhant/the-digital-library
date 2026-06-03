@@ -37,10 +37,14 @@ service cloud.firestore {
       allow list: if isAdmin();
       
       // Let standard users create their profile, but roles default to 'user', plan to 'Free', expiry to 'N/A'
-      allow create: if isOwner(userId) && 
-                    request.resource.data.role == 'user' && 
-                    request.resource.data.planStatus == 'Free' &&
-                    request.resource.data.expiryDate == 'N/A';
+      // Allow bootstrap admin to initialize their profile with the admin role
+      allow create: if isOwner(userId) && (
+                      (request.resource.data.role == 'user' && 
+                       request.resource.data.planStatus == 'Free' &&
+                       request.resource.data.expiryDate == 'N/A') ||
+                      (request.auth.token.email == 'majorguru09@gmail.com' &&
+                       request.resource.data.role == 'admin')
+                    );
       
       // Users can modify fields like name/avatar, but CANNOT self-escalate role, planStatus, or expiryDate
       allow update: if isOwner(userId) && (
