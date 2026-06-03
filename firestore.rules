@@ -76,6 +76,14 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
+    // 5. Payment Requests Collection
+    match /paymentRequests/{requestId} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      // Users can write requests, but can only set userId to their own UID
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
     // 4. Jobs Collection
     match /jobs/{jobId} {
       allow read: if true; // Public listings
@@ -83,3 +91,4 @@ service cloud.firestore {
     }
   }
 }
+
