@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import * as admin from 'firebase-admin';
 import { adminAuth } from '../../../lib/firebase-admin';
+import axios from 'axios';
 
 const BOOTSTRAP_ADMINS = ['majorguru09@gmail.com', 'admin2@gmail.com'];
 
@@ -13,8 +14,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing token' }, { status: 400 });
     }
 
-    // 1. Verify the Google ID Token using Firebase Admin SDK
-    const decodedToken = await adminAuth.verifyIdToken(credential);
+    // 1. Verify the Google ID Token using Google's tokeninfo API
+    const response = await axios.get(`https://oauth2.googleapis.com/tokeninfo?id_token=${credential}`);
+    const decodedToken = response.data;
+
+    if (!decodedToken || decodedToken.aud !== "714314998273-55vo9d46u0n6alrfddfd2murgvcsjidg.apps.googleusercontent.com") {
+      return NextResponse.json({ error: 'Unauthorized: Invalid token audience' }, { status: 401 });
+    }
+
     const email = decodedToken.email || '';
 
     // 2. Validate email domain restriction (@mmmut.ac.in or bootstrap admin)

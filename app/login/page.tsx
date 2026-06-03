@@ -23,7 +23,7 @@ export default function Login() {
       if ((window as any).google?.accounts?.id) {
         try {
           (window as any).google.accounts.id.initialize({
-            client_id: "81698641442-pcv9bppntupqj023geikkaoo1coveho9.apps.googleusercontent.com",
+            client_id: "714314998273-55vo9d46u0n6alrfddfd2murgvcsjidg.apps.googleusercontent.com",
             callback: handleCredentialResponse,
           });
           

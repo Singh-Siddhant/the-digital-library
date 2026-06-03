@@ -20,12 +20,16 @@ export async function GET(
 
     let decodedToken;
     try {
-      decodedToken = await adminAuth.verifyIdToken(sessionToken);
-    } catch {
+      const response = await axios.get(`https://oauth2.googleapis.com/tokeninfo?id_token=${sessionToken}`);
+      decodedToken = response.data;
+      if (!decodedToken || decodedToken.aud !== "714314998273-55vo9d46u0n6alrfddfd2murgvcsjidg.apps.googleusercontent.com") {
+        throw new Error('Invalid audience');
+      }
+    } catch (e) {
       return NextResponse.json({ error: 'Unauthorized: Session invalid' }, { status: 401 });
     }
 
-    const uid = decodedToken.uid;
+    const uid = decodedToken.sub;
 
     // 2. Fetch User Profile from Firestore to check roles
     const userDoc = await adminDb.collection('users').doc(uid).get();
