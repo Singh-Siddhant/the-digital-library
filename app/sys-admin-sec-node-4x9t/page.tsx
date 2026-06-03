@@ -20,10 +20,8 @@ import {
   Shield, 
   Users, 
   FileCheck, 
-  TrendingUp, 
   Edit2, 
-  Save, 
-  BookOpen 
+  Save 
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -140,7 +138,7 @@ export default function Admin() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
             <div className="flex items-center gap-3">
-              <Link href="/" className="flex items-center gap-3 group">
+              <Link href="/explore" className="flex items-center gap-3 group">
                 <div className="w-9 h-9 bg-gradient-to-br from-cyan-400 to-blue-600 rounded-lg flex items-center justify-center neon-glow-cyan transition-transform group-hover:scale-105">
                   <span className="text-white font-bold text-lg">D</span>
                 </div>
@@ -202,6 +200,9 @@ export default function Admin() {
                     <div className="flex-grow">
                       <div className="flex items-center gap-3 mb-2">
                         <span className="px-2.5 py-0.5 rounded bg-cyan-400/10 text-cyan-400 text-[9px] font-bold uppercase tracking-wider border border-cyan-400/10">{res.category}</span>
+                        {res.semester && (
+                          <span className="px-2.5 py-0.5 rounded bg-blue-400/10 text-blue-400 text-[9px] font-bold uppercase tracking-wider border border-blue-400/10">{res.semester}</span>
+                        )}
                         <span className="text-slate-600 font-mono text-[10px]">{new Date(res.createdAt).toLocaleString()}</span>
                       </div>
                       <h3 className="text-xl font-bold text-white mb-2">{res.title}</h3>
@@ -241,7 +242,7 @@ export default function Admin() {
                 <thead>
                   <tr className="bg-white/[0.02] border-b border-white/5 text-[10px] font-bold text-slate-500 uppercase tracking-widest font-mono">
                     <th className="p-6">User / Email</th>
-                    <th className="p-6">Target Batch</th>
+                    <th className="p-6">Batch / Exam</th>
                     <th className="p-6">System Role</th>
                     <th className="p-6">Plan Status</th>
                     <th className="p-6">Expiry Date</th>
@@ -259,7 +260,7 @@ export default function Admin() {
                           <div className="font-mono text-slate-500 text-[10px]">{u.email}</div>
                         </td>
 
-                        {/* Batch */}
+                        {/* Batch / Exam */}
                         <td className="p-6">
                           {isEditing ? (
                             <input
@@ -269,7 +270,14 @@ export default function Admin() {
                               className="bg-slate-900 border border-white/10 rounded px-3 py-1.5 text-white text-xs outline-none focus:border-cyan-400"
                             />
                           ) : (
-                            <span className="font-medium text-slate-300">{u.batch || 'General Prep'}</span>
+                            <div>
+                              <div className="font-medium text-slate-300">{u.batch || 'General Prep'}</div>
+                              {u.targetedExam && (
+                                <div className="text-[10px] text-cyan-400 font-mono mt-0.5">
+                                  {u.targetedExam} {u.branch ? `(${u.branch})` : ''} {u.semester ? `[${u.semester}]` : ''}
+                                </div>
+                              )}
+                            </div>
                           )}
                         </td>
 

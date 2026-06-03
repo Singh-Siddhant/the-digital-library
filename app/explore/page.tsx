@@ -10,7 +10,6 @@ import {
   Search, 
   BookOpen, 
   ChevronRight, 
-  Shield, 
   Upload, 
   LogOut, 
   Download, 
@@ -18,6 +17,7 @@ import {
   ChevronLeft
 } from 'lucide-react';
 import Link from 'next/link';
+import { Suspense } from 'react';
 
 const categories = [
   "GATE", "RRB", "SSC", "CAT", "UPSC", "Placement Prep", "Semester Notes"
@@ -28,7 +28,10 @@ const branches = [
   "Civil Engineering", "Electronics Engineering", "Chemical Engineering", "Other"
 ];
 
-import { Suspense } from 'react';
+const semesters = [
+  "Semester 1", "Semester 2", "Semester 3", "Semester 4", 
+  "Semester 5", "Semester 6", "Semester 7", "Semester 8"
+];
 
 function ExploreContent() {
   const router = useRouter();
@@ -38,8 +41,10 @@ function ExploreContent() {
   const [resources, setResources] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  
   const [selectedCategory, setSelectedCategory] = useState(searchParams?.get('category') || 'All');
   const [selectedBranch, setSelectedBranch] = useState('All');
+  const [selectedSemester, setSelectedSemester] = useState('All');
   const [selectedResourceType, setSelectedResourceType] = useState('All'); // note or pyq
   
   const [viewingResource, setViewingResource] = useState<any>(null);
@@ -51,13 +56,17 @@ function ExploreContent() {
 
   useEffect(() => {
     if (!user && !loading) {
-      router.push('/login');
+      router.push('/');
     }
   }, [user, loading, router]);
 
   useEffect(() => {
     const categoryFromQuery = searchParams?.get('category');
-    if (categoryFromQuery) setSelectedCategory(categoryFromQuery);
+    if (categoryFromQuery) {
+      setSelectedCategory(categoryFromQuery);
+      setSelectedBranch('All');
+      setSelectedSemester('All');
+    }
   }, [searchParams]);
 
   useEffect(() => {
@@ -118,12 +127,27 @@ function ExploreContent() {
     }
   };
 
+  const handleCategoryChange = (cat: string) => {
+    setSelectedCategory(cat);
+    setSelectedBranch('All');
+    setSelectedSemester('All');
+  };
+
   const filteredResources = resources.filter(res => {
     const matchesSearch = res.title.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = selectedCategory === 'All' || res.category === selectedCategory;
-    const matchesBranch = selectedBranch === 'All' || res.branch === selectedBranch;
+    
+    // Branch applies to GATE & Semester Notes
+    const isBranchApplicable = selectedCategory === 'GATE' || selectedCategory === 'Semester Notes';
+    const matchesBranch = !isBranchApplicable || selectedBranch === 'All' || res.branch === selectedBranch;
+
+    // Semester applies to Semester Notes only
+    const isSemesterApplicable = selectedCategory === 'Semester Notes';
+    const matchesSemester = !isSemesterApplicable || selectedSemester === 'All' || res.semester === selectedSemester;
+
     const matchesType = selectedResourceType === 'All' || res.resourceType === selectedResourceType;
-    return matchesSearch && matchesCategory && matchesBranch && matchesType;
+    
+    return matchesSearch && matchesCategory && matchesBranch && matchesSemester && matchesType;
   });
 
   const handlePayment = (resource: any) => {
@@ -173,7 +197,7 @@ function ExploreContent() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
             <div className="flex items-center gap-3">
-              <Link href="/" className="flex items-center gap-3 group">
+              <Link href="/explore" className="flex items-center gap-3 group">
                 <div className="w-9 h-9 bg-gradient-to-br from-cyan-400 to-blue-600 rounded-lg flex items-center justify-center neon-glow-cyan transition-transform group-hover:scale-105">
                   <span className="text-white font-bold text-lg">D</span>
                 </div>
@@ -194,11 +218,25 @@ function ExploreContent() {
               <Link href="/donate" className="text-sm font-medium text-slate-400 hover:text-white transition-colors">
                 Support
               </Link>
-              {userProfile?.role === 'admin' && (
-                <Link href="/admin" className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-cyan-400 hover:bg-white/10 transition-all flex items-center gap-2">
-                  <Shield size={14} />
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Admin Panel</span>
-                </Link>
+              
+              {user && (
+                <div className="flex items-center gap-4">
+                  <Link href="/upload" className="flex items-center gap-2 text-sm font-medium text-cyan-400 hover:text-cyan-300 transition-colors">
+                    <Upload size={18} />
+                    <span>Upload</span>
+                  </Link>
+                  <div className="flex items-center gap-3">
+                    <Link href="/dashboard" className="w-9 h-9 rounded-full bg-slate-800 border border-white/10 flex items-center justify-center text-xs font-bold font-mono text-cyan-400 uppercase hover:border-cyan-400 transition-all">
+                      {userProfile?.name?.substring(0, 2) || 'ST'}
+                    </Link>
+                    <button 
+                      onClick={() => logout().then(() => router.push('/'))}
+                      className="p-2 text-slate-500 hover:text-white transition-all"
+                    >
+                      <LogOut size={18} />
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
           </div>
@@ -215,7 +253,7 @@ function ExploreContent() {
               {['All', ...categories].map(cat => (
                 <button
                   key={cat}
-                  onClick={() => { setSelectedCategory(cat); setSelectedBranch('All'); }}
+                  onClick={() => handleCategoryChange(cat)}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all uppercase tracking-wider ${selectedCategory === cat ? 'accent-cyan text-white shadow-lg shadow-cyan-500/10' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}
                 >
                   {cat}
@@ -224,22 +262,55 @@ function ExploreContent() {
             </div>
           </div>
 
-          {selectedCategory === 'GATE' && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-              <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-slate-500 mb-6">GATE Branches</p>
-              <div className="space-y-1">
-                {['All', ...branches].map(b => (
-                  <button 
-                    key={b} 
-                    onClick={() => setSelectedBranch(b)}
-                    className={`w-full text-left px-4 py-2 text-[10px] uppercase font-bold tracking-widest rounded-lg ${selectedBranch === b ? 'text-cyan-400' : 'text-slate-600 hover:text-white'}`}
-                  >
-                    {b}
-                  </button>
-                ))}
-              </div>
-            </motion.div>
-          )}
+          <AnimatePresence>
+            {/* Semester Filters (Semester Notes only) */}
+            {selectedCategory === 'Semester Notes' && (
+              <motion.div 
+                initial={{ opacity: 0, height: 0 }} 
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden"
+              >
+                <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-slate-500 mb-4">Academic Semester</p>
+                <div className="space-y-1 max-h-48 overflow-y-auto custom-scrollbar">
+                  {['All', ...semesters].map(s => (
+                    <button 
+                      key={s} 
+                      onClick={() => setSelectedSemester(s)}
+                      className={`w-full text-left px-4 py-2 text-[10px] uppercase font-bold tracking-widest rounded-lg ${selectedSemester === s ? 'text-cyan-400' : 'text-slate-600 hover:text-white'}`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+
+            {/* Branch Filters (GATE and Semester Notes only) */}
+            {(selectedCategory === 'GATE' || selectedCategory === 'Semester Notes') && (
+              <motion.div 
+                initial={{ opacity: 0, height: 0 }} 
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden"
+              >
+                <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-slate-500 mb-4">
+                  {selectedCategory === 'GATE' ? 'GATE Branches' : 'Academic Branches'}
+                </p>
+                <div className="space-y-1 max-h-48 overflow-y-auto custom-scrollbar">
+                  {['All', ...branches].map(b => (
+                    <button 
+                      key={b} 
+                      onClick={() => setSelectedBranch(b)}
+                      className={`w-full text-left px-4 py-2 text-[10px] uppercase font-bold tracking-widest rounded-lg ${selectedBranch === b ? 'text-cyan-400' : 'text-slate-600 hover:text-white'}`}
+                    >
+                      {b}
+                    </button>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           <div className="mt-auto">
             <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-slate-500 mb-6">Resource Type</p>
@@ -256,7 +327,11 @@ function ExploreContent() {
           <div className="max-w-6xl mx-auto space-y-10">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
               <div>
-                <h2 className="text-4xl font-display font-bold text-white mb-2">{selectedCategory} {selectedBranch !== 'All' ? `- ${selectedBranch}` : ''}</h2>
+                <h2 className="text-4xl font-display font-bold text-white mb-2">
+                  {selectedCategory} 
+                  {selectedSemester !== 'All' ? ` - ${selectedSemester}` : ''}
+                  {selectedBranch !== 'All' ? ` - ${selectedBranch}` : ''}
+                </h2>
                 <p className="text-slate-500">{filteredResources.length} secure study modules available.</p>
               </div>
               <div className="relative w-full md:w-96 group">

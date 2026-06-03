@@ -21,6 +21,9 @@ export interface UserProfile {
   batch: string;
   planStatus: 'Free' | 'Paid';
   expiryDate: string;
+  branch?: string;
+  targetedExam?: string;
+  semester?: string;
 }
 
 interface AuthContextType {

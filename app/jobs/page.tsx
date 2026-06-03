@@ -5,8 +5,10 @@ import axios from 'axios';
 import { motion, AnimatePresence } from 'motion/react';
 import { Briefcase, Calendar, Search } from 'lucide-react';
 import Link from 'next/link';
+import { useAuth } from '../lib/AuthContext';
 
 export default function Jobs() {
+  const { user, userProfile } = useAuth();
   const [jobs, setJobs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedYear, setSelectedYear] = useState('All');
@@ -65,6 +67,13 @@ export default function Jobs() {
                 <span className="absolute -bottom-[22px] left-0 right-0 h-0.5 bg-cyan-400" />
               </Link>
               <Link href="/donate" className="text-sm font-medium text-slate-400 hover:text-white transition-colors">Support</Link>
+              {user && (
+                <div className="flex items-center gap-3">
+                  <Link href="/dashboard" className="w-9 h-9 rounded-full bg-slate-800 border border-white/10 flex items-center justify-center text-xs font-bold font-mono text-cyan-400 uppercase hover:border-cyan-400 transition-all">
+                    {userProfile?.name?.substring(0, 2) || 'ST'}
+                  </Link>
+                </div>
+              )}
             </div>
           </div>
         </div>

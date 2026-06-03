@@ -4,8 +4,10 @@ import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { Heart, Landmark, Book, Share2, Coffee, Sparkles } from 'lucide-react';
 import Link from 'next/link';
+import { useAuth } from '../lib/AuthContext';
 
 export default function Donate() {
+  const { user, userProfile } = useAuth();
   const [selectedAmount, setSelectedAmount] = useState('₹500');
 
   const handleDonate = () => {
@@ -57,6 +59,13 @@ export default function Donate() {
                 Support
                 <span className="absolute -bottom-[22px] left-0 right-0 h-0.5 bg-cyan-400" />
               </Link>
+              {user && (
+                <div className="flex items-center gap-3">
+                  <Link href="/dashboard" className="w-9 h-9 rounded-full bg-slate-800 border border-white/10 flex items-center justify-center text-xs font-bold font-mono text-cyan-400 uppercase hover:border-cyan-400 transition-all">
+                    {userProfile?.name?.substring(0, 2) || 'ST'}
+                  </Link>
+                </div>
+              )}
             </div>
           </div>
         </div>

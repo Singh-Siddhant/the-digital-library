@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { collection, addDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../lib/AuthContext';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   CheckCircle2, 
   AlertCircle, 
@@ -24,6 +24,7 @@ export default function ResourceUpload() {
   const [linkUrl, setLinkUrl] = useState('');
   const [category, setCategory] = useState('GATE');
   const [branch, setBranch] = useState('Computer Science');
+  const [semester, setSemester] = useState('Semester 1');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
@@ -35,10 +36,11 @@ export default function ResourceUpload() {
 
   const categories = ["GATE", "RRB", "SSC", "CAT", "UPSC", "Placement Prep", "Semester Notes"];
   const branches = ["Computer Science", "Electrical Engineering", "Mechanical Engineering", "Civil Engineering", "Electronics Engineering", "Chemical Engineering", "Other"];
+  const semesters = ["Semester 1", "Semester 2", "Semester 3", "Semester 4", "Semester 5", "Semester 6", "Semester 7", "Semester 8"];
 
   useEffect(() => {
     if (!authLoading && !user) {
-      router.push('/login');
+      router.push('/');
     }
   }, [user, authLoading, router]);
 
@@ -59,15 +61,13 @@ export default function ResourceUpload() {
     setLoading(true);
 
     try {
-      // Save metadata directly to Firestore resources collection
-      await addDoc(collection(db, 'resources'), {
+      const docData: any = {
         title,
         description,
         fileUrl: linkUrl,
         fileName: 'Google Drive Asset',
         textContent: '',
         category,
-        branch,
         resourceType,
         contentType, // e.g. pdf-gdrive or video-gdrive
         isPaid,
@@ -76,7 +76,21 @@ export default function ResourceUpload() {
         uploaderName: userProfile?.name || 'Anonymous',
         isVerified: false, // Mandatory unverified for admin queue approval
         createdAt: new Date().toISOString()
-      });
+      };
+
+      if (category === 'GATE') {
+        docData.branch = branch;
+        docData.semester = '';
+      } else if (category === 'Semester Notes') {
+        docData.branch = branch;
+        docData.semester = semester;
+      } else {
+        docData.branch = '';
+        docData.semester = '';
+      }
+
+      // Save metadata directly to Firestore resources collection
+      await addDoc(collection(db, 'resources'), docData);
 
       setSuccess(true);
       setTimeout(() => router.push('/explore'), 3000);
@@ -116,6 +130,9 @@ export default function ResourceUpload() {
     );
   }
 
+  const isBranchVisible = category === 'GATE' || category === 'Semester Notes';
+  const isSemesterVisible = category === 'Semester Notes';
+
   return (
     <div className="immersive-bg min-h-screen flex flex-col">
       <div className="ambient-glow-1" />
@@ -125,7 +142,7 @@ export default function ResourceUpload() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
             <div className="flex items-center gap-3">
-              <Link href="/" className="flex items-center gap-3 group">
+              <Link href="/explore" className="flex items-center gap-3 group">
                 <div className="w-9 h-9 bg-gradient-to-br from-cyan-400 to-blue-600 rounded-lg flex items-center justify-center neon-glow-cyan transition-transform group-hover:scale-105">
                   <span className="text-white font-bold text-lg">D</span>
                 </div>
@@ -134,10 +151,18 @@ export default function ResourceUpload() {
                 </span>
               </Link>
             </div>
+            
             <div className="flex items-center gap-8">
               <Link href="/explore" className="text-sm font-medium text-slate-400 hover:text-white transition-colors">Explore</Link>
               <Link href="/jobs" className="text-sm font-medium text-slate-400 hover:text-white transition-colors">Job Updates</Link>
               <Link href="/donate" className="text-sm font-medium text-slate-400 hover:text-white transition-colors">Support</Link>
+              {user && (
+                <div className="flex items-center gap-3">
+                  <Link href="/dashboard" className="w-9 h-9 rounded-full bg-slate-800 border border-white/10 flex items-center justify-center text-xs font-bold font-mono text-cyan-400 uppercase hover:border-cyan-400 transition-all">
+                    {userProfile?.name?.substring(0, 2) || 'ST'}
+                  </Link>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -227,6 +252,46 @@ export default function ResourceUpload() {
               </div>
             </div>
 
+            <AnimatePresence>
+              {/* Semester (Semester Notes only) */}
+              {isSemesterVisible && (
+                <motion.div 
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="space-y-2 overflow-hidden"
+                >
+                  <label className="text-[10px] uppercase font-bold tracking-widest text-slate-500">Academic Semester</label>
+                  <select
+                    value={semester}
+                    onChange={(e) => setSemester(e.target.value)}
+                    className="w-full h-12 px-4 bg-[#0A0C16] border border-white/10 rounded-xl text-white outline-none focus:border-cyan-400 transition-all text-xs"
+                  >
+                    {semesters.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </motion.div>
+              )}
+
+              {/* Specialty / Branch (GATE & Semester Notes only) */}
+              {isBranchVisible && (
+                <motion.div 
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="space-y-2 overflow-hidden"
+                >
+                  <label className="text-[10px] uppercase font-bold tracking-widest text-slate-500">Academic Branch / Specialty</label>
+                  <select
+                    value={branch}
+                    onChange={(e) => setBranch(e.target.value)}
+                    className="w-full h-12 px-4 bg-[#0A0C16] border border-white/10 rounded-xl text-white outline-none focus:border-cyan-400 transition-all text-xs"
+                  >
+                    {branches.map(b => <option key={b} value={b}>{b}</option>)}
+                  </select>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             {/* Description */}
             <div className="space-y-2">
               <label className="text-[10px] uppercase font-bold tracking-widest text-slate-500">Description</label>
@@ -237,18 +302,6 @@ export default function ResourceUpload() {
                 onChange={(e) => setDescription(e.target.value)}
                 className="w-full p-4 bg-[#0A0C16] border border-white/10 rounded-xl text-white outline-none focus:border-cyan-400 transition-all text-xs leading-relaxed"
               />
-            </div>
-
-            {/* Specialty / Branch */}
-            <div className="space-y-2">
-              <label className="text-[10px] uppercase font-bold tracking-widest text-slate-500">Academic Branch / Specialty</label>
-              <select
-                value={branch}
-                onChange={(e) => setBranch(e.target.value)}
-                className="w-full h-12 px-4 bg-[#0A0C16] border border-white/10 rounded-xl text-white outline-none focus:border-cyan-400 transition-all text-xs"
-              >
-                {branches.map(b => <option key={b} value={b}>{b}</option>)}
-              </select>
             </div>
 
             {/* Premium Paid Configuration */}
