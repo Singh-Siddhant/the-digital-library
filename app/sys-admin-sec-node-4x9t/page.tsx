@@ -42,12 +42,10 @@ export default function Admin() {
   const [editExpiry, setEditExpiry] = useState('');
 
   useEffect(() => {
-    if (!authLoading && userProfile?.role !== 'admin') {
-      router.push('/');
-    } else if (userProfile?.role === 'admin') {
+    if (userProfile?.role === 'admin') {
       fetchAdminData();
     }
-  }, [userProfile, authLoading, router]);
+  }, [userProfile]);
 
   const fetchAdminData = async () => {
     setLoading(true);
@@ -121,10 +119,29 @@ export default function Admin() {
     }
   };
 
-  if (authLoading || userProfile?.role !== 'admin') {
+  if (authLoading) {
     return (
       <div className="immersive-bg min-h-screen flex items-center justify-center">
         <div className="w-8 h-8 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (userProfile?.role !== 'admin') {
+    return (
+      <div className="immersive-bg min-h-screen flex items-center justify-center p-4">
+        <div className="glass-card w-full max-w-md p-10 text-center relative z-10 border-red-500/20">
+          <div className="w-14 h-14 bg-red-500/10 rounded-xl mx-auto flex items-center justify-center mb-8 border border-red-500/20 text-red-500">
+            <Shield className="w-7 h-7" />
+          </div>
+          <h1 className="text-2xl font-display font-bold mb-3 text-white tracking-tight">Access Restricted</h1>
+          <p className="text-slate-500 mb-8 text-sm leading-relaxed">
+            This node is restricted to System Administrators. If you are the admin, please wait a few seconds for Firestore sync, or try logging out and logging in again.
+          </p>
+          <Link href="/explore" className="inline-flex w-full h-12 bg-white/5 border border-white/10 text-slate-300 font-bold rounded-xl items-center justify-center hover:bg-white/10 hover:text-white transition-all text-xs uppercase tracking-wider">
+            Return to Explore
+          </Link>
+        </div>
       </div>
     );
   }
