@@ -72,11 +72,7 @@ function ExploreContent() {
     new Date(userProfile.expiryDate).getTime() > Date.now()
   );
 
-  useEffect(() => {
-    if (!user && !loading) {
-      router.push('/');
-    }
-  }, [user, loading, router]);
+  // Guest redirect check removed to allow compulsory public catalog display
 
   useEffect(() => {
     const categoryFromQuery = searchParams?.get('category');
@@ -262,7 +258,7 @@ function ExploreContent() {
                 Support
               </Link>
               
-              {user && (
+              {user ? (
                 <div className="flex items-center gap-4">
                   <Link href="/upload" className="flex items-center gap-2 text-sm font-medium text-cyan-400 hover:text-cyan-300 transition-colors">
                     <Upload size={18} />
@@ -280,6 +276,13 @@ function ExploreContent() {
                     </button>
                   </div>
                 </div>
+              ) : (
+                <Link 
+                  href="/" 
+                  className="px-4 py-1.5 bg-cyan-500 text-black text-xs font-bold uppercase tracking-wider rounded-lg hover:bg-cyan-400 transition-colors"
+                >
+                  Login
+                </Link>
               )}
             </div>
           </div>

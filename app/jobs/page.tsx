@@ -67,12 +67,19 @@ export default function Jobs() {
                 <span className="absolute -bottom-[22px] left-0 right-0 h-0.5 bg-cyan-400" />
               </Link>
               <Link href="/donate" className="text-sm font-medium text-slate-400 hover:text-white transition-colors">Support</Link>
-              {user && (
+              {user ? (
                 <div className="flex items-center gap-3">
                   <Link href="/dashboard" className="w-9 h-9 rounded-full bg-slate-800 border border-white/10 flex items-center justify-center text-xs font-bold font-mono text-cyan-400 uppercase hover:border-cyan-400 transition-all">
                     {userProfile?.name?.substring(0, 2) || 'ST'}
                   </Link>
                 </div>
+              ) : (
+                <Link 
+                  href="/" 
+                  className="px-4 py-1.5 bg-cyan-500 text-black text-xs font-bold uppercase tracking-wider rounded-lg hover:bg-cyan-400 transition-colors"
+                >
+                  Login
+                </Link>
               )}
             </div>
           </div>
