@@ -146,6 +146,20 @@ function ExploreContent() {
   const [payLoading, setPayLoading] = useState(false);
   const [paySuccess, setPaySuccess] = useState(false);
   const [payError, setPayError] = useState('');
+  
+  // Custom non-blocking security warning toast
+  const [securityToast, setSecurityToast] = useState("");
+  const toastTimeoutRef = useRef<any>(null);
+
+  const showSecurityToast = (msg: string) => {
+    setSecurityToast(msg);
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+    }
+    toastTimeoutRef.current = setTimeout(() => {
+      setSecurityToast("");
+    }, 3000);
+  };
 
   // Security Flags
   const isCyber = userProfile?.role === 'cyber';
@@ -355,19 +369,22 @@ function ExploreContent() {
         // Block Ctrl+P / Cmd+P (Print)
         if (ctrlOrCmd && key === 'p') {
           e.preventDefault();
-          alert('Security Lockout: Printing this secure academic file is strictly disabled.');
+          e.stopPropagation();
+          showSecurityToast('Printing this secure academic file is disabled.');
           return;
         }
         // Block Ctrl+S / Cmd+S (Save)
         if (ctrlOrCmd && key === 's') {
           e.preventDefault();
-          alert('Security Lockout: Saving this secure academic file is strictly disabled.');
+          e.stopPropagation();
+          showSecurityToast('Saving this secure academic file is disabled.');
           return;
         }
         // Block Ctrl+U / Cmd+U (View Source)
         if (ctrlOrCmd && key === 'u') {
           e.preventDefault();
-          alert('Security Lockout: Viewing source code is disabled.');
+          e.stopPropagation();
+          showSecurityToast('Viewing source code is disabled.');
           return;
         }
         // Block DevTools: F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+Shift+C
@@ -376,7 +393,8 @@ function ExploreContent() {
           (ctrlOrCmd && shift && (key === 'i' || key === 'j' || key === 'c'))
         ) {
           e.preventDefault();
-          alert('Security Lockout: Developer tools are disabled in secure viewing mode.');
+          e.stopPropagation();
+          showSecurityToast('Developer tools are disabled in secure viewing mode.');
           return;
         }
       }
@@ -1070,6 +1088,21 @@ function ExploreContent() {
                 <span>Protected by Firebase E2E Rules</span>
               </div>
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Non-blocking Security Warning Toast */}
+      <AnimatePresence>
+        {securityToast && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, x: "-50%" }}
+            animate={{ opacity: 1, y: 0, x: "-50%" }}
+            exit={{ opacity: 0, y: -20, x: "-50%" }}
+            className="fixed top-6 left-1/2 z-[200] px-6 py-3 bg-red-650 bg-red-600 border border-red-500/20 text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-2xl backdrop-blur-md flex items-center gap-2"
+          >
+            <AlertCircle size={16} className="text-white animate-pulse" />
+            <span>{securityToast}</span>
           </motion.div>
         )}
       </AnimatePresence>
