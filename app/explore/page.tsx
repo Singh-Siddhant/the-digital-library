@@ -232,6 +232,7 @@ function ExploreContent() {
         if (!cancelled) {
           console.error("PDF.js loading failed:", err);
           setPdfError(err.message || "Failed to load secure PDF document.");
+          alert("Secure Viewer Error: " + (err.message || err.toString()));
         }
       } finally {
         if (!cancelled) {
