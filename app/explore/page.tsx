@@ -951,7 +951,7 @@ function ExploreContent() {
                   ) : (
                     <div 
                       ref={pdfContainerRef}
-                      className="w-full h-full overflow-y-auto bg-[#030407] flex flex-col items-center p-6 select-none relative scroll-smooth"
+                      className="w-full h-full overflow-auto bg-[#030407] flex flex-col items-center p-6 select-none relative scroll-smooth"
                       onScroll={handlePdfScroll}
                       onContextMenu={(e) => e.preventDefault()}
                     >
