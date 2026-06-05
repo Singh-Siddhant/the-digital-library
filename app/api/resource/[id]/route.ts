@@ -9,6 +9,28 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
+
+    // Direct download/view prevention headers check
+    const fetchDest = req.headers.get('sec-fetch-dest');
+    const referer = req.headers.get('referer');
+    const host = req.headers.get('host');
+
+    if (fetchDest && 
+        fetchDest !== 'iframe' && 
+        fetchDest !== 'embed' && 
+        fetchDest !== 'object' && 
+        fetchDest !== 'image' && 
+        fetchDest !== 'video') {
+      return NextResponse.json({ 
+        error: 'Access Denied: Direct file downloading is disabled for security reasons.' 
+      }, { status: 403 });
+    }
+
+    if (referer && host && !referer.includes(host)) {
+      return NextResponse.json({ 
+        error: 'Access Denied: Referer origin is invalid.' 
+      }, { status: 403 });
+    }
     
     // 1. Authenticate user from secure HttpOnly session cookie
     const cookieStore = await cookies();
@@ -31,10 +53,26 @@ export async function GET(
 
     const uid = decodedToken.sub;
 
-    // 2. Fetch User Profile from Firestore to check roles
-    const userDoc = await adminDb.collection('users').doc(uid).get();
+    // 2. Fetch User Profile from Firestore to check roles (auto-create if missing)
+    let userDoc = await adminDb.collection('users').doc(uid).get();
     if (!userDoc.exists) {
-      return NextResponse.json({ error: 'Unauthorized: User profile missing' }, { status: 403 });
+      const bootstrapAdmins = ['majorguru09@gmail.com', '2024021271@mmmut.ac.in'];
+      const isBootstrapAdmin = bootstrapAdmins.includes(decodedToken.email || '');
+
+      const defaultProfile = {
+        uid: uid,
+        name: decodedToken.name || decodedToken.email?.split('@')[0] || 'Student',
+        email: decodedToken.email || '',
+        picture: decodedToken.picture || '',
+        role: isBootstrapAdmin ? 'admin' : 'user',
+        batch: 'AI/Cyber Prep',
+        planStatus: 'Free',
+        expiryDate: 'N/A',
+        createdAt: new Date().toISOString()
+      };
+
+      await adminDb.collection('users').doc(uid).set(defaultProfile);
+      userDoc = await adminDb.collection('users').doc(uid).get();
     }
     const userProfile = userDoc.data();
     const role = userProfile?.role || 'user';
@@ -72,6 +110,40 @@ export async function GET(
       return NextResponse.json({ error: 'Invalid resource link URL' }, { status: 400 });
     }
 
+    // Detect expected Content-Type and file extension
+    let expectedContentType = 'application/pdf';
+    const typeStr = String(resource?.contentType || '').toLowerCase();
+    if (typeStr.includes('pdf')) {
+      expectedContentType = 'application/pdf';
+    } else if (typeStr.includes('video') || typeStr.includes('mp4')) {
+      expectedContentType = 'video/mp4';
+    } else if (typeStr.includes('image') || typeStr.includes('png') || typeStr.includes('jpg') || typeStr.includes('jpeg') || typeStr.includes('gif') || typeStr.includes('webp')) {
+      if (typeStr.includes('png')) expectedContentType = 'image/png';
+      else if (typeStr.includes('gif')) expectedContentType = 'image/gif';
+      else if (typeStr.includes('webp')) expectedContentType = 'image/webp';
+      else expectedContentType = 'image/jpeg';
+    } else {
+      // Fallback checking fileUrl or fileName
+      const fileUrlLower = fileUrl.toLowerCase();
+      const fileNameLower = String(resource?.fileName || '').toLowerCase();
+      if (fileUrlLower.endsWith('.pdf') || fileNameLower.endsWith('.pdf')) expectedContentType = 'application/pdf';
+      else if (fileUrlLower.endsWith('.mp4') || fileNameLower.endsWith('.mp4')) expectedContentType = 'video/mp4';
+      else if (fileUrlLower.endsWith('.png') || fileNameLower.endsWith('.png')) expectedContentType = 'image/png';
+      else if (fileUrlLower.endsWith('.jpg') || fileUrlLower.endsWith('.jpeg') || fileNameLower.endsWith('.jpg') || fileNameLower.endsWith('.jpeg')) expectedContentType = 'image/jpeg';
+      else if (fileUrlLower.endsWith('.gif') || fileNameLower.endsWith('.gif')) expectedContentType = 'image/gif';
+      else if (fileUrlLower.endsWith('.webp') || fileNameLower.endsWith('.webp')) expectedContentType = 'image/webp';
+    }
+
+    let fileExtension = '.pdf';
+    if (expectedContentType.startsWith('video/')) {
+      fileExtension = '.mp4';
+    } else if (expectedContentType.startsWith('image/')) {
+      if (expectedContentType.includes('png')) fileExtension = '.png';
+      else if (expectedContentType.includes('gif')) fileExtension = '.gif';
+      else if (expectedContentType.includes('webp')) fileExtension = '.webp';
+      else fileExtension = '.jpg';
+    }
+
     // Stream from Firebase Storage securely if URL belongs to Firebase Storage
     if (fileUrl.includes('firebasestorage.googleapis.com')) {
       try {
@@ -84,12 +156,20 @@ export async function GET(
           }
         });
 
-        const contentType = String(response.headers['content-type'] || 'application/pdf');
+        let contentType = String(response.headers['content-type'] || expectedContentType);
+        if (contentType === 'application/octet-stream') {
+          contentType = expectedContentType;
+        }
+
+        let fileName = resource.title || 'secure-document';
+        if (!fileName.toLowerCase().endsWith(fileExtension)) {
+          fileName += fileExtension;
+        }
         
         return new NextResponse(response.data as any, {
           headers: {
             'Content-Type': contentType,
-            'Content-Disposition': `inline; filename="${resource.title || 'secure-document'}"`,
+            'Content-Disposition': `inline; filename="${fileName}"`,
             'Cache-Control': 'no-store, max-age=0, must-revalidate',
           }
         });
@@ -123,33 +203,123 @@ export async function GET(
       return NextResponse.json({ error: 'Invalid Google Drive link format.' }, { status: 400 });
     }
 
-    // Fetch stream from Google Drive secure direct download
-    const driveDownloadUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+    // Fetch stream from Google Drive secure direct download with confirmation bypass
+    let driveResponse;
+    const initialUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
     
-    const response = await axios({
-      method: 'get',
-      url: driveDownloadUrl,
-      responseType: 'stream',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-      }
-    });
+    try {
+      // 1. Fetch headers and cookies first using a stream
+      const firstResponse = await axios({
+        method: 'get',
+        url: initialUrl,
+        responseType: 'stream',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        }
+      });
 
-    const contentType = String(response.headers['content-type'] || 'application/pdf');
-    
-    // Return stream back to Client
-    return new NextResponse(response.data as any, {
-      headers: {
-        'Content-Type': contentType,
-        'Content-Disposition': `inline; filename="${resource.title || 'secure-document'}"`,
-        'Cache-Control': 'no-store, max-age=0, must-revalidate',
+      const contentType = String(firstResponse.headers['content-type'] || '');
+      
+      // 2. If it's HTML, it means Google Drive presented a virus warning/confirmation page (or login redirect)
+      if (contentType.includes('text/html')) {
+        // Read stream to string
+        const htmlContent = await new Promise<string>((resolve, reject) => {
+          let data = '';
+          firstResponse.data.on('data', (chunk: any) => data += chunk.toString('utf8'));
+          firstResponse.data.on('end', () => resolve(data));
+          firstResponse.data.on('error', (err: any) => reject(err));
+        });
+
+        // 2a. Detect Google Login Redirect (meaning file sharing settings are private/restricted)
+        if (htmlContent.includes('accounts.google.com') || htmlContent.includes('ServiceLogin') || htmlContent.includes('google-signin')) {
+          return NextResponse.json({ 
+            error: 'Access Denied: This specific Google Drive file is private. Please ensure its sharing settings are set to "Anyone with the link can view" in Google Drive.' 
+          }, { status: 403 });
+        }
+
+        // Extract confirm token
+        const confirmMatch = htmlContent.match(/confirm=([a-zA-Z0-9_-]+)/);
+        if (confirmMatch && confirmMatch[1]) {
+          const confirmToken = confirmMatch[1];
+          // Get cookies
+          const setCookieHeader = firstResponse.headers['set-cookie'];
+          const cookie = setCookieHeader ? setCookieHeader.map((c: string) => c.split(';')[0]).join('; ') : '';
+
+          // Fetch second response with confirmation token and cookie
+          driveResponse = await axios({
+            method: 'get',
+            url: `https://drive.google.com/uc?export=download&confirm=${confirmToken}&id=${fileId}`,
+            responseType: 'stream',
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              'Cookie': cookie
+            }
+          });
+        } else {
+          // If confirm token is not found, throw error to trigger catch block
+          throw new Error('Google Drive warning page found but confirm token could not be extracted.');
+        }
+      } else {
+        // It's the direct file stream
+        driveResponse = firstResponse;
       }
-    });
+
+      let streamContentType = String(driveResponse.headers['content-type'] || expectedContentType);
+      if (streamContentType === 'application/octet-stream') {
+        streamContentType = expectedContentType;
+      }
+
+      let fileName = resource.title || 'secure-document';
+      if (!fileName.toLowerCase().endsWith(fileExtension)) {
+        fileName += fileExtension;
+      }
+
+      return new NextResponse(driveResponse.data as any, {
+        headers: {
+          'Content-Type': streamContentType,
+          'Content-Disposition': `inline; filename="${fileName}"`,
+          'Cache-Control': 'no-store, max-age=0, must-revalidate',
+        }
+      });
+
+    } catch (e: any) {
+      console.error("Direct Google Drive stream proxy failed, trying backup docs method...", e);
+      
+      // Fallback: If direct stream fails, construct docs export url
+      const backupUrl = `https://docs.google.com/uc?export=download&id=${fileId}`;
+      const backupResponse = await axios({
+        method: 'get',
+        url: backupUrl,
+        responseType: 'stream',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        }
+      });
+
+      let backupContentType = String(backupResponse.headers['content-type'] || expectedContentType);
+      if (backupContentType === 'application/octet-stream') {
+        backupContentType = expectedContentType;
+      }
+
+      let backupFileName = resource.title || 'secure-document';
+      if (!backupFileName.toLowerCase().endsWith(fileExtension)) {
+        backupFileName += fileExtension;
+      }
+
+      return new NextResponse(backupResponse.data as any, {
+        headers: {
+          'Content-Type': backupContentType,
+          'Content-Disposition': `inline; filename="${backupFileName}"`,
+          'Cache-Control': 'no-store, max-age=0, must-revalidate',
+        }
+      });
+    }
 
   } catch (err: any) {
     console.error("Resource Streaming Proxy Error:", err);
     return NextResponse.json({ 
-      error: 'Streaming failure. Verify your Google Drive sharing settings (Anyone with the link can view).' 
+      error: 'Streaming failure. Verify your Google Drive sharing settings (Anyone with the link can view).',
+      details: err.message || err.toString()
     }, { status: 500 });
   }
 }

@@ -70,6 +70,8 @@ export default function ResourceUpload() {
       setContentType('pdf-local');
     } else if (file.type.includes('video') || file.type.includes('mp4')) {
       setContentType('video-local');
+    } else if (file.type.includes('image') || file.type.match(/\.(png|jpe?g|gif|webp)$/i)) {
+      setContentType('image-local');
     } else {
       setContentType('document-local');
     }
@@ -335,22 +337,38 @@ export default function ResourceUpload() {
               </div>
             ) : (
               /* Google Drive Link Input */
-              <div className="space-y-2">
-                <label className="text-[10px] uppercase font-bold tracking-widest text-slate-500">Google Drive / YouTube Link</label>
-                <div className="relative">
-                  <input
-                    required
-                    type="url"
-                    placeholder="https://drive.google.com/file/d/... or https://youtube.com/..."
-                    value={linkUrl}
-                    onChange={(e) => setLinkUrl(e.target.value)}
-                    className="w-full h-12 pl-12 pr-4 bg-[#0A0C16] border border-white/10 rounded-xl text-white outline-none focus:border-cyan-400 transition-all font-mono text-xs"
-                  />
-                  <LinkIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600 w-4.5 h-4.5" />
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase font-bold tracking-widest text-slate-500">Google Drive / YouTube Link</label>
+                  <div className="relative">
+                    <input
+                      required
+                      type="url"
+                      placeholder="https://drive.google.com/file/d/... or https://youtube.com/..."
+                      value={linkUrl}
+                      onChange={(e) => setLinkUrl(e.target.value)}
+                      className="w-full h-12 pl-12 pr-4 bg-[#0A0C16] border border-white/10 rounded-xl text-white outline-none focus:border-cyan-400 transition-all font-mono text-xs"
+                    />
+                    <LinkIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600 w-4.5 h-4.5" />
+                  </div>
+                  <p className="text-[10px] text-slate-600 leading-normal">
+                    ⚠️ Make sure sharing is set to: <strong>&quot;Anyone with the link can view&quot;</strong>.
+                  </p>
                 </div>
-                <p className="text-[10px] text-slate-600 leading-normal">
-                  ⚠️ Make sure sharing is set to: <strong>&quot;Anyone with the link can view&quot;</strong>.
-                </p>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase font-bold tracking-widest text-slate-500">Link Format / Type</label>
+                  <select
+                    value={contentType === 'pdf-local' ? 'pdf-gdrive' : contentType}
+                    onChange={(e) => setContentType(e.target.value)}
+                    className="w-full h-12 px-4 bg-[#0A0C16] border border-white/10 rounded-xl text-white outline-none focus:border-cyan-400 transition-all text-xs"
+                  >
+                    <option value="pdf-gdrive">PDF (Google Drive)</option>
+                    <option value="video-gdrive">Video (Google Drive / YouTube)</option>
+                    <option value="image-gdrive">Image (Google Drive)</option>
+                    <option value="document-gdrive">Other Document (Google Drive)</option>
+                  </select>
+                </div>
               </div>
             )}
 

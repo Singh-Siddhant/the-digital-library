@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { loadPdfDocument } from '../lib/pdfViewer';
 import { collection, query, where, getDocs, orderBy, addDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../lib/AuthContext';
@@ -38,6 +39,79 @@ const semesters = [
   "Semester 5", "Semester 6", "Semester 7", "Semester 8"
 ];
 
+interface PdfPageProps {
+  pdfDoc: any;
+  pageNumber: number;
+  scale: number;
+}
+
+const PdfPage: React.FC<PdfPageProps> = ({ pdfDoc, pageNumber, scale }) => {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    let renderTask: any = null;
+
+    const renderPage = async () => {
+      if (!pdfDoc) return;
+      try {
+        const page = await pdfDoc.getPage(pageNumber);
+        if (cancelled) return;
+
+        const viewport = page.getViewport({ scale });
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        const context = canvas.getContext("2d");
+        if (!context) return;
+
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+
+        setLoading(true);
+        
+        renderTask = page.render({
+          canvasContext: context,
+          viewport: viewport
+        });
+
+        await renderTask.promise;
+        if (!cancelled) {
+          setLoading(false);
+        }
+      } catch (err: any) {
+        if (err.name !== "RenderingCancelledException") {
+          console.error(`Failed to render page ${pageNumber}:`, err);
+        }
+      }
+    };
+
+    renderPage();
+
+    return () => {
+      cancelled = true;
+      if (renderTask) {
+        renderTask.cancel();
+      }
+    };
+  }, [pdfDoc, pageNumber, scale]);
+
+  return (
+    <div className="relative flex justify-center w-full mb-4 select-none pointer-events-none">
+      {loading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-slate-950/20 rounded z-10">
+          <Loader2 className="w-5 h-5 animate-spin text-cyan-400" />
+        </div>
+      )}
+      <canvas
+        ref={canvasRef}
+        className="max-w-full h-auto rounded border border-white/5 shadow-2xl bg-[#030407] select-none pointer-events-none"
+      />
+    </div>
+  );
+};
+
 function ExploreContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -54,6 +128,16 @@ function ExploreContent() {
   
   const [viewingResource, setViewingResource] = useState<any>(null);
   const [purchasedResourceIds, setPurchasedResourceIds] = useState<string[]>([]);
+
+  // PDF.js Canvas Rendering states
+  const [pdfDoc, setPdfDoc] = useState<any>(null);
+  const [pdfPage, setPdfPage] = useState(1);
+  const [pdfScale, setPdfScale] = useState(1.25);
+  const [pdfTotalPages, setPdfTotalPages] = useState(0);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfError, setPdfError] = useState("");
+  const pdfContainerRef = useRef<HTMLDivElement | null>(null);
+  const touchStartRef = useRef({ x: 0, y: 0 });
   
   // Custom Payment Modal for Single Paid Resource
   const [payModalResource, setPayModalResource] = useState<any>(null);
@@ -111,17 +195,189 @@ function ExploreContent() {
     }
   }, [searchParams, resources, purchasedResourceIds, isPremiumActive, isCyber, isAdmin]);
 
+  // Load PDF Document when viewingResource changes
   useEffect(() => {
-    const handleModalKeys = (e: KeyboardEvent) => {
-      if (viewingResource) {
-        if ((e.ctrlKey && e.key === 'p') || (e.ctrlKey && e.key === 's')) {
-          e.preventDefault();
-          alert('Security Lockout: Saving or printing this secure academic file is strictly disabled.');
+    let cancelled = false;
+    if (!viewingResource || getResourceMediaType(viewingResource) !== 'pdf') {
+      setPdfDoc(null);
+      setPdfTotalPages(0);
+      setPdfPage(1);
+      setPdfError("");
+      return;
+    }
+
+    const loadPdf = async () => {
+      setPdfLoading(true);
+      setPdfError("");
+      try {
+        const response = await fetch(`/api/resource/${viewingResource.id}`);
+        if (!response.ok) {
+          throw new Error("Unable to fetch secure document from server.");
+        }
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        const loadedPdf = await loadPdfDocument(bytes);
+        if (!cancelled) {
+          setPdfDoc(loadedPdf);
+          setPdfTotalPages(loadedPdf.numPages);
+          setPdfPage(1);
+        }
+      } catch (err: any) {
+        if (!cancelled) {
+          console.error("PDF.js loading failed:", err);
+          setPdfError(err.message || "Failed to load secure PDF document.");
+        }
+      } finally {
+        if (!cancelled) {
+          setPdfLoading(false);
         }
       }
     };
-    window.addEventListener('keydown', handleModalKeys);
-    return () => window.removeEventListener('keydown', handleModalKeys);
+
+    loadPdf();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [viewingResource]);
+
+  // Scroll & Zoom Handlers for PDF Canvas List
+  const handlePdfScroll = () => {
+    const container = pdfContainerRef.current;
+    if (!container) return;
+
+    const pageNodes = container.childNodes;
+    const containerScrollTop = container.scrollTop;
+    
+    let currentPage = 1;
+    let minDistance = Infinity;
+
+    for (let i = 0; i < pageNodes.length; i++) {
+      const node = pageNodes[i] as HTMLElement;
+      if (node && node.offsetTop !== undefined) {
+        const distance = Math.abs(node.offsetTop - containerScrollTop);
+        if (distance < minDistance) {
+          minDistance = distance;
+          currentPage = i + 1;
+        }
+      }
+    }
+    
+    setPdfPage((prev) => {
+      if (prev !== currentPage) {
+        return currentPage;
+      }
+      return prev;
+    });
+  };
+
+  const scrollToPdfPage = (pageNum: number) => {
+    const container = pdfContainerRef.current;
+    if (!container) return;
+
+    const pageNodes = container.childNodes;
+    const targetNode = pageNodes[pageNum - 1] as HTMLElement;
+    if (targetNode) {
+      container.scrollTo({
+        top: targetNode.offsetTop,
+        behavior: 'smooth'
+      });
+      setPdfPage(pageNum);
+    }
+  };
+
+  // Attach Ctrl+Wheel zoom listener manually to allow preventing browser zoom
+  useEffect(() => {
+    const container = pdfContainerRef.current;
+    if (!container) return;
+
+    const handleWheelZoom = (e: WheelEvent) => {
+      if (e.ctrlKey) {
+        e.preventDefault();
+        const delta = e.deltaY < 0 ? 0.15 : -0.15;
+        setPdfScale(s => Math.min(3.0, Math.max(0.6, s + delta)));
+      }
+    };
+
+    container.addEventListener('wheel', handleWheelZoom, { passive: false });
+    return () => {
+      container.removeEventListener('wheel', handleWheelZoom);
+    };
+  }, [pdfDoc, pdfLoading]);
+
+  // Global ContextMenu Blocker (Capturing Phase) to block right-clicks everywhere (including scrollbars/slide bar)
+  useEffect(() => {
+    const handleContextMenuGlobal = (e: MouseEvent) => {
+      if (viewingResource) {
+        e.preventDefault();
+      }
+    };
+    window.addEventListener('contextmenu', handleContextMenuGlobal, true);
+    return () => {
+      window.removeEventListener('contextmenu', handleContextMenuGlobal, true);
+    };
+  }, [viewingResource]);
+
+  // Media Type detection helper
+  const getResourceMediaType = (res: any) => {
+    if (!res) return 'pdf';
+    const type = (res.contentType || '').toLowerCase();
+    if (type.includes('pdf')) return 'pdf';
+    if (type.includes('video') || type.includes('mp4')) return 'video';
+    if (type.includes('image') || type.includes('png') || type.includes('jpg') || type.includes('jpeg') || type.includes('gif') || type.includes('webp')) return 'image';
+    
+    // Fallback to URL or name
+    const url = (res.fileUrl || '').toLowerCase();
+    const name = (res.fileName || '').toLowerCase();
+    if (url.includes('.pdf') || name.includes('.pdf')) return 'pdf';
+    if (url.includes('.mp4') || name.includes('.mp4') || url.includes('youtube.com') || url.includes('youtu.be')) return 'video';
+    if (url.includes('.png') || name.includes('.png') || url.includes('.jpg') || name.includes('.jpg') || url.includes('.jpeg') || name.includes('.jpeg') || url.includes('.gif') || name.includes('.gif') || url.includes('.webp') || name.includes('.webp')) return 'image';
+    
+    return 'pdf'; // Default fallback
+  };
+
+
+
+  useEffect(() => {
+    const handleModalKeys = (e: KeyboardEvent) => {
+      if (viewingResource) {
+        const key = e.key.toLowerCase();
+        const ctrlOrCmd = e.ctrlKey || e.metaKey;
+        const shift = e.shiftKey;
+
+        // Block Ctrl+P / Cmd+P (Print)
+        if (ctrlOrCmd && key === 'p') {
+          e.preventDefault();
+          alert('Security Lockout: Printing this secure academic file is strictly disabled.');
+          return;
+        }
+        // Block Ctrl+S / Cmd+S (Save)
+        if (ctrlOrCmd && key === 's') {
+          e.preventDefault();
+          alert('Security Lockout: Saving this secure academic file is strictly disabled.');
+          return;
+        }
+        // Block Ctrl+U / Cmd+U (View Source)
+        if (ctrlOrCmd && key === 'u') {
+          e.preventDefault();
+          alert('Security Lockout: Viewing source code is disabled.');
+          return;
+        }
+        // Block DevTools: F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+Shift+C
+        if (
+          e.key === 'F12' || 
+          (ctrlOrCmd && shift && (key === 'i' || key === 'j' || key === 'c'))
+        ) {
+          e.preventDefault();
+          alert('Security Lockout: Developer tools are disabled in secure viewing mode.');
+          return;
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleModalKeys, true);
+    return () => {
+      window.removeEventListener('keydown', handleModalKeys, true);
+    };
   }, [viewingResource]);
 
   const fetchPurchases = async () => {
@@ -567,7 +823,9 @@ function ExploreContent() {
             initial={{ opacity: 0 }} 
             animate={{ opacity: 1 }} 
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-xl flex items-center justify-center p-6"
+            onContextMenu={(e) => e.preventDefault()}
+            className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-xl flex items-center justify-center p-6 select-none"
+            style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
           >
             <div className="max-w-5xl w-full h-[88vh] glass-card flex flex-col relative overflow-hidden bg-[#05060B]">
               <button 
@@ -577,27 +835,56 @@ function ExploreContent() {
                 <ChevronLeft size={20} className="rotate-180" />
               </button>
 
-              <div className="p-6 border-b border-white/5 flex justify-between items-center bg-[#070912] pr-16">
+              <div className="p-6 border-b border-white/5 flex flex-col md:flex-row md:items-center justify-between bg-[#070912] gap-4 pr-16">
                 <div>
                   <h2 className="text-xl font-bold text-white mb-1">{viewingResource.title}</h2>
-                  <p className="text-xs text-slate-500">By {viewingResource.uploaderName || 'Verified Scholar'} • Secure MMMUT Archive Node</p>
+                  <p className="text-xs text-slate-500">By {viewingResource.uploaderName || 'Verified Scholar'}</p>
                 </div>
-                <div className="flex items-center gap-3">
-                  {/* Cyber Exception Download Override */}
-                  {(isCyber || isAdmin) && (
-                    <a 
-                      href={`/api/resource/${viewingResource.id}`} 
-                      download
-                      className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer shadow-lg shadow-emerald-600/20"
+
+                {/* PDF Canvas Toolbar Controls */}
+                {getResourceMediaType(viewingResource) === 'pdf' && pdfDoc && (
+                  <div className="flex flex-wrap items-center gap-3 bg-white/[0.02] border border-white/5 px-4 py-2 rounded-xl text-xs">
+                    <button
+                      disabled={pdfPage <= 1}
+                      onClick={() => scrollToPdfPage(pdfPage - 1)}
+                      className="px-2.5 py-1 bg-white/5 border border-white/10 hover:bg-cyan-400 hover:text-black rounded font-bold uppercase text-[9px] tracking-wider transition-all disabled:opacity-30 disabled:hover:bg-white/5 disabled:hover:text-white cursor-pointer"
                     >
-                      <Download size={14} /> Download PDF (Cyber Pass)
-                    </a>
-                  )}
-                  <span className="px-3 py-1 bg-cyan-400/10 text-cyan-400 text-[10px] font-bold rounded-lg uppercase tracking-widest flex items-center gap-1.5 border border-cyan-400/20">
-                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
-                    Protected Reader
-                  </span>
-                </div>
+                      Prev
+                    </button>
+                    <span className="text-slate-400 font-mono text-[10px] min-w-[50px] text-center">
+                      {pdfPage} / {pdfTotalPages}
+                    </span>
+                    <button
+                      disabled={pdfPage >= pdfTotalPages}
+                      onClick={() => scrollToPdfPage(pdfPage + 1)}
+                      className="px-2.5 py-1 bg-white/5 border border-white/10 hover:bg-cyan-400 hover:text-black rounded font-bold uppercase text-[9px] tracking-wider transition-all disabled:opacity-30 disabled:hover:bg-white/5 disabled:hover:text-white cursor-pointer"
+                    >
+                      Next
+                    </button>
+                    <div className="w-[1px] h-4 bg-white/10" />
+                    <button
+                      onClick={() => setPdfScale(s => Math.max(0.6, s - 0.15))}
+                      className="px-2.5 py-1 bg-white/5 hover:bg-white/10 rounded font-bold uppercase text-[9px] tracking-wider cursor-pointer"
+                    >
+                      Zoom -
+                    </button>
+                    <span className="text-slate-400 font-mono text-[10px] min-w-[40px] text-center">
+                      {Math.round(pdfScale * 100)}%
+                    </span>
+                    <button
+                      onClick={() => setPdfScale(s => Math.min(3.0, s + 0.15))}
+                      className="px-2.5 py-1 bg-white/5 hover:bg-white/10 rounded font-bold uppercase text-[9px] tracking-wider cursor-pointer"
+                    >
+                      Zoom +
+                    </button>
+                    <button
+                      onClick={() => setPdfScale(1.25)}
+                      className="px-2 py-1 bg-white/5 hover:bg-white/10 rounded font-bold uppercase text-[9px] tracking-wider text-slate-400 cursor-pointer"
+                    >
+                      Reset
+                    </button>
+                  </div>
+                )}
               </div>
               
               {/* Reader Proxy View Render (Google Drive raw links never exposed) */}
@@ -606,13 +893,160 @@ function ExploreContent() {
                   <div className="w-full h-full overflow-y-auto p-10 font-mono text-slate-300 leading-relaxed whitespace-pre-wrap select-none">
                     {viewingResource.textContent || 'No text content available.'}
                   </div>
+                ) : getResourceMediaType(viewingResource) === 'video' ? (
+                  <div className="w-full h-full flex items-center justify-center p-4">
+                    <video
+                      src={`/api/resource/${viewingResource.id}`}
+                      controls
+                      controlsList="nodownload"
+                      onContextMenu={(e) => e.preventDefault()}
+                      className="max-w-full max-h-full rounded-xl border border-white/5 shadow-2xl"
+                    />
+                  </div>
+                ) : getResourceMediaType(viewingResource) === 'image' ? (
+                  <div className="w-full h-full flex items-center justify-center p-4 select-none">
+                    <img
+                      src={`/api/resource/${viewingResource.id}`}
+                      alt={viewingResource.title}
+                      onContextMenu={(e) => e.preventDefault()}
+                      className="max-w-full max-h-full object-contain rounded-xl border border-white/5 shadow-2xl select-none pointer-events-none"
+                    />
+                  </div>
+                ) : getResourceMediaType(viewingResource) === 'pdf' ? (
+                  pdfLoading ? (
+                    <div className="h-full w-full flex flex-col items-center justify-center gap-3 text-slate-500">
+                      <Loader2 className="h-8 w-8 animate-spin text-cyan-400" />
+                      <span className="text-xs uppercase tracking-widest font-bold text-cyan-400/80">Rendering Document...</span>
+                    </div>
+                  ) : pdfError ? (
+                    <div className="h-full w-full flex items-center justify-center p-6 text-center text-xs font-bold text-red-500 uppercase tracking-widest">
+                      {pdfError}
+                    </div>
+                  ) : (
+                    <div 
+                      ref={pdfContainerRef}
+                      className="w-full h-full overflow-y-auto bg-[#030407] flex flex-col items-center p-6 select-none relative scroll-smooth"
+                      onScroll={handlePdfScroll}
+                      onContextMenu={(e) => e.preventDefault()}
+                    >
+                      {Array.from({ length: pdfTotalPages }, (_, i) => (
+                        <PdfPage 
+                          key={i + 1}
+                          pdfDoc={pdfDoc}
+                          pageNumber={i + 1}
+                          scale={pdfScale}
+                        />
+                      ))}
+                    </div>
+                  )
                 ) : (
                   <>
                     <iframe
                       src={`/api/resource/${viewingResource.id}#toolbar=0&navpanes=0&scrollbar=0`}
                       className="w-full h-full border-0 select-none pointer-events-auto"
                       title={viewingResource.title}
+                      onLoad={(e) => {
+                        try {
+                          const iframeDoc = e.currentTarget.contentDocument || e.currentTarget.contentWindow?.document;
+                          if (iframeDoc) {
+                            // Prevent right-click inside the iframe
+                            iframeDoc.addEventListener('contextmenu', (evt) => {
+                              evt.preventDefault();
+                              alert('Security Lockout: Right-click is disabled on secure academic documents.');
+                            });
+                            // Prevent keyboard shortcuts inside the iframe
+                            iframeDoc.addEventListener('keydown', (evt) => {
+                              const key = evt.key.toLowerCase();
+                              const ctrlOrCmd = evt.ctrlKey || evt.metaKey;
+                              const shift = evt.shiftKey;
+
+                              if (ctrlOrCmd && key === 'p') {
+                                evt.preventDefault();
+                                alert('Security Lockout: Printing this secure document is disabled.');
+                              }
+                              if (ctrlOrCmd && key === 's') {
+                                evt.preventDefault();
+                                alert('Security Lockout: Saving this secure document is disabled.');
+                              }
+                              if (ctrlOrCmd && key === 'u') {
+                                evt.preventDefault();
+                                alert('Security Lockout: Viewing source code is disabled.');
+                              }
+                              if (evt.key === 'F12' || (ctrlOrCmd && shift && (key === 'i' || key === 'j' || key === 'c'))) {
+                                evt.preventDefault();
+                                alert('Security Lockout: Developer tools are disabled.');
+                              }
+                            }, true);
+                          }
+                        } catch (err) {
+                          console.warn("Same-origin iframe direct event injection bypassed due to browser security context:", err);
+                        }
+                      }}
                     />
+                    {/* Transparent Top-Right Toolbar Blocker (covers only print/download buttons) */}
+                    <div className="absolute top-0 right-0 w-36 h-14 bg-transparent pointer-events-auto z-10" onContextMenu={(e) => e.preventDefault()} />
+                    
+                    {/* Transparent Main Document Blocker (blocks right-clicks on pages, leaves scrollbar lane active) */}
+                    <div 
+                      className="absolute inset-y-0 left-0 w-[calc(100%-20px)] bg-transparent pointer-events-auto z-10" 
+                      onContextMenu={(e) => e.preventDefault()}
+                      onWheel={(e) => {
+                        const iframe = document.querySelector('iframe');
+                        if (iframe) {
+                          try {
+                            const doc = iframe.contentDocument || iframe.contentWindow?.document;
+                            const scrollContainer = doc?.documentElement || doc?.body;
+                            if (scrollContainer) {
+                              scrollContainer.scrollBy({
+                                top: e.deltaY,
+                                left: e.deltaX,
+                                behavior: 'auto'
+                              });
+                            }
+                          } catch (err) {
+                            // Suppress cross-origin warnings
+                          }
+                        }
+                      }}
+                      onTouchStart={(e) => {
+                        if (e.touches && e.touches[0]) {
+                          touchStartRef.current = {
+                            x: e.touches[0].clientX,
+                            y: e.touches[0].clientY
+                          };
+                        }
+                      }}
+                      onTouchMove={(e) => {
+                        if (e.touches && e.touches[0]) {
+                          const deltaY = touchStartRef.current.y - e.touches[0].clientY;
+                          const deltaX = touchStartRef.current.x - e.touches[0].clientX;
+                          
+                          // Update start for continuous tracking
+                          touchStartRef.current = {
+                            x: e.touches[0].clientX,
+                            y: e.touches[0].clientY
+                          };
+
+                          const iframe = document.querySelector('iframe');
+                          if (iframe) {
+                            try {
+                              const doc = iframe.contentDocument || iframe.contentWindow?.document;
+                              const scrollContainer = doc?.documentElement || doc?.body;
+                              if (scrollContainer) {
+                                scrollContainer.scrollBy({
+                                  top: deltaY,
+                                  left: deltaX,
+                                  behavior: 'auto'
+                                });
+                              }
+                            } catch (err) {
+                              // Suppress cross-origin warnings
+                            }
+                          }
+                        }
+                      }}
+                    />
+                    
                     {/* Transparent Click Prevention Layer for non-cyber/non-admin */}
                     {!isCyber && !isAdmin && (
                       <div className="absolute inset-0 bg-transparent pointer-events-none" />
