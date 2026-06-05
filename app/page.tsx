@@ -30,6 +30,7 @@ import {
   Loader2,
   LogOut,
   Upload,
+  Download,
   Briefcase,
   Trash2,
   FolderLock,
@@ -238,24 +239,46 @@ export default function AdminConsoleHome() {
   const handleVerify = async (res: any, approve: boolean) => {
     try {
       if (approve) {
-        await updateDoc(doc(db, 'resources', res.id), { isVerified: true });
+        const finalUrl = res.tempDriveUrl !== undefined && res.tempDriveUrl.trim() !== '' ? res.tempDriveUrl.trim() : res.fileUrl;
+        const finalType = res.tempContentType !== undefined ? res.tempContentType : res.contentType;
+        
+        const updates: any = {
+          isVerified: true,
+          fileUrl: finalUrl,
+          contentType: finalType
+        };
+
+        // If it has a storagePath and the URL was updated to a Google Drive link, delete from Firebase Storage
+        if (res.storagePath && finalUrl !== res.fileUrl && (finalUrl.includes('drive.google.com') || finalUrl.includes('docs.google.com'))) {
+          try {
+            const fileRef = ref(storage, res.storagePath);
+            await deleteObject(fileRef);
+            updates.storagePath = ''; // Clear storagePath in Firestore
+            console.log("Storage optimized: Deleted migrated Firebase Storage file:", res.storagePath);
+          } catch (storageErr) {
+            console.error("Failed to delete migrated storage object:", storageErr);
+          }
+        }
+
+        await updateDoc(doc(db, 'resources', res.id), updates);
         alert('Module approved and published to main library!');
       } else {
         // Clean up from Firebase Storage if it has physical file
         if (res.storagePath) {
           try {
-            await deleteObject(ref(storage, res.storagePath));
+            const fileRef = ref(storage, res.storagePath);
+            await deleteObject(fileRef);
           } catch (storageErr) {
-            console.error("Failed to delete physical file from storage:", storageErr);
+            console.error("Failed to delete storage object on reject:", storageErr);
           }
         }
         await deleteDoc(doc(db, 'resources', res.id));
         alert('Module rejected and permanently deleted.');
       }
       setPendingResources(pendingResources.filter(r => r.id !== res.id));
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert('Verification update failed.');
+      alert(err.message || 'Verification update failed.');
     }
   };
 
@@ -342,6 +365,8 @@ export default function AdminConsoleHome() {
       setUpContentType('pdf-local');
     } else if (file.type.includes('video') || file.type.includes('mp4')) {
       setUpContentType('video-local');
+    } else if (file.type.includes('image') || file.type.match(/\.(png|jpe?g|gif|webp)$/i)) {
+      setUpContentType('image-local');
     } else {
       setUpContentType('document-local');
     }
@@ -678,13 +703,13 @@ export default function AdminConsoleHome() {
               </span>
             </div>
             
-            <div className="flex items-center gap-4 text-xs font-mono text-slate-500 uppercase">
-              <span className="text-cyan-400">{user.email}</span>
+            <div className="flex items-center gap-2 sm:gap-4 text-xs font-mono text-slate-500 uppercase">
+              <span className="text-cyan-400 hidden md:inline">{user.email}</span>
               <button 
                 onClick={() => logout()}
-                className="ml-4 p-2 bg-white/5 hover:bg-red-500/10 hover:text-red-400 text-slate-400 border border-white/5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5"
+                className="p-2 bg-white/5 hover:bg-red-500/10 hover:text-red-400 text-slate-400 border border-white/5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5"
               >
-                <LogOut size={14} /> Log Out
+                <LogOut size={14} /> <span className="hidden sm:inline">Log Out</span>
               </button>
             </div>
           </div>
@@ -811,6 +836,67 @@ export default function AdminConsoleHome() {
                             <span>BY: <strong className="text-slate-300">{res.uploaderName}</strong></span>
                             <span>PAYMENT: <strong className={res.isPaid ? 'text-orange-400' : 'text-green-400'}>{res.isPaid ? `PAID (₹${res.price})` : 'FREE'}</strong></span>
                             <span>LINK: <a href={res.fileUrl} target="_blank" rel="noreferrer" className="text-cyan-400 underline lowercase hover:text-cyan-300">{res.fileUrl}</a></span>
+                          </div>
+
+                          {/* Storage Migration Panel */}
+                          <div className="mt-4 p-4 rounded-xl bg-white/[0.02] border border-white/5 space-y-4">
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-1.5">
+                              <Shield size={12} /> Admin Storage Optimizer & File Migration
+                            </div>
+                            <div className="grid md:grid-cols-2 gap-4">
+                              <div className="space-y-1.5">
+                                <label className="text-[9px] uppercase tracking-widest text-slate-500 font-bold">New Google Drive URL (saves server space)</label>
+                                <input
+                                  type="url"
+                                  placeholder="https://drive.google.com/file/d/..."
+                                  value={res.tempDriveUrl !== undefined ? res.tempDriveUrl : (res.fileUrl.includes('drive.google.com') ? res.fileUrl : '')}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setPendingResources(prev => prev.map(p => p.id === res.id ? { ...p, tempDriveUrl: val } : p));
+                                  }}
+                                  className="w-full h-9 px-3 bg-black/50 border border-white/10 rounded-lg text-white outline-none focus:border-cyan-400 text-xs font-mono"
+                                />
+                              </div>
+                              <div className="space-y-1.5">
+                                <label className="text-[9px] uppercase tracking-widest text-slate-500 font-bold">Override Content Type</label>
+                                <select
+                                  value={res.tempContentType !== undefined ? res.tempContentType : res.contentType}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setPendingResources(prev => prev.map(p => p.id === res.id ? { ...p, tempContentType: val } : p));
+                                  }}
+                                  className="w-full h-9 px-3 bg-black/50 border border-white/10 rounded-lg text-white outline-none focus:border-cyan-400 text-xs"
+                                >
+                                  <option value="pdf-local">PDF (Local)</option>
+                                  <option value="pdf-gdrive">PDF (Google Drive)</option>
+                                  <option value="video-local">Video (Local)</option>
+                                  <option value="video-gdrive">Video (Google Drive / YouTube)</option>
+                                  <option value="image-local">Image (Local)</option>
+                                  <option value="image-gdrive">Image (Google Drive)</option>
+                                  <option value="document-local">Other Document (Local)</option>
+                                  <option value="document-gdrive">Other Document (Google Drive)</option>
+                                </select>
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-3">
+                              <a
+                                href={res.fileUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="px-3 py-1.5 bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500 hover:text-black rounded-lg border border-cyan-500/20 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all"
+                              >
+                                <Download size={12} /> Download Original File
+                              </a>
+                              {res.fileUrl.includes('firebasestorage.googleapis.com') ? (
+                                <span className="text-[9px] font-mono text-orange-400">
+                                  ⚠️ Currently hosted on Firebase Storage. Download it, upload to Google Drive, paste URL above to save server space.
+                                </span>
+                              ) : (
+                                <span className="text-[9px] font-mono text-slate-500">
+                                  ✓ Currently hosted on Google Drive or external link.
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                         

@@ -103,7 +103,7 @@ export async function GET(req: NextRequest) {
 
     // 3. Test Firestore Connectivity (Using server-side credentials)
     try {
-      const dbProjId = adminDb.projectId;
+      const dbProjId = (adminDb as any).projectId;
       diagnostics.firestore.projectId = dbProjId;
 
       const [snapUsers, snapResources, snapPayments, snapJobs] = await Promise.all([

@@ -22,6 +22,8 @@ import {
 import Link from 'next/link';
 import axios from 'axios';
 
+const PUBLIC_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1VtiMY9i-q7moN1m0fifTnR7OsnxGzfHx2M3DUXWaInE/export?format=csv";
+
 export default function DevDiagnostics() {
   const { user, userProfile, loading: authLoading, loginWithGoogle, logout } = useAuth();
   const router = useRouter();
@@ -510,7 +512,7 @@ export default function DevDiagnostics() {
                 <div className="space-y-3">
                   <h4 className="font-bold text-white text-sm">1. Fixing Firestore "Missing or insufficient permissions"</h4>
                   <ul className="list-disc list-inside space-y-2">
-                    <li>Confirm that you generated a service account credentials JSON in <strong>Firebase Console -> Project Settings -> Service Accounts</strong>.</li>
+                    <li>Confirm that you generated a service account credentials JSON in <strong>Firebase Console &rarr; Project Settings &rarr; Service Accounts</strong>.</li>
                     <li>Verify the Vercel Environment variables are named exactly:
                       <ul className="list-disc list-inside pl-4 mt-1 font-mono text-[10px]">
                         <li>`FIREBASE_CLIENT_EMAIL`</li>
