@@ -212,7 +212,14 @@ function ExploreContent() {
       try {
         const response = await fetch(`/api/resource/${viewingResource.id}`);
         if (!response.ok) {
-          throw new Error("Unable to fetch secure document from server.");
+          let errMsg = `Unable to fetch secure document from server (Status ${response.status}).`;
+          try {
+            const errData = await response.json();
+            if (errData && errData.error) {
+              errMsg = `${errData.error} (Status ${response.status})`;
+            }
+          } catch (_) {}
+          throw new Error(errMsg);
         }
         const bytes = new Uint8Array(await response.arrayBuffer());
         const loadedPdf = await loadPdfDocument(bytes);
