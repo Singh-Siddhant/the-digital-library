@@ -20,7 +20,8 @@ export async function GET(
         fetchDest !== 'embed' && 
         fetchDest !== 'object' && 
         fetchDest !== 'image' && 
-        fetchDest !== 'video') {
+        fetchDest !== 'video' && 
+        fetchDest !== 'empty') {
       return NextResponse.json({ 
         error: 'Access Denied: Direct file downloading is disabled for security reasons.' 
       }, { status: 403 });
