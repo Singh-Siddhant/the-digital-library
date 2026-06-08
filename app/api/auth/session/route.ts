@@ -4,7 +4,7 @@ import * as admin from 'firebase-admin';
 import { adminAuth } from '../../../lib/firebase-admin';
 import axios from 'axios';
 
-const BOOTSTRAP_ADMINS = ['2024021271@mmmut.ac.in', 'majorguru09@gmail.com'];
+const BOOTSTRAP_ADMINS = ['2024021271@mmmut.ac.in', 'majorguru09@gmail.com', '2023051154@mmmut.ac.in'];
 
 export async function POST(req: NextRequest) {
   try {

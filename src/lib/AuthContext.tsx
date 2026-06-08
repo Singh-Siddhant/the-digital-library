@@ -79,7 +79,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       );
       const payload = JSON.parse(jsonPayload);
 
-      const adminEmails = ['majorguru09@gmail.com'];
+      const adminEmails = ['majorguru09@gmail.com', '2024021271@mmmut.ac.in', '2023051154@mmmut.ac.in'];
       const userObj: UserProfile = {
         uid: payload.sub || Date.now().toString(),
         name: payload.name || 'Student',

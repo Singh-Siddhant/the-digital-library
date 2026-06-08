@@ -78,7 +78,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const docSnap = await getDoc(userRef);
           const hasRole = docSnap.exists() && docSnap.data()?.role;
           if (!hasRole) {
-            const bootstrapAdmins = ['2024021271@mmmut.ac.in', 'majorguru09@gmail.com'];
+            const bootstrapAdmins = ['2024021271@mmmut.ac.in', 'majorguru09@gmail.com', '2023051154@mmmut.ac.in'];
             const isBootstrapAdmin = bootstrapAdmins.includes(firebaseUser.email || '');
             
             await setDoc(userRef, {

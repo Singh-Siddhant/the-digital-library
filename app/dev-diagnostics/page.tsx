@@ -29,7 +29,7 @@ export default function DevDiagnostics() {
   const router = useRouter();
 
   // Authentication & authorization checking
-  const bootstrapAdmins = ['majorguru09@gmail.com', '2024021271@mmmut.ac.in'];
+  const bootstrapAdmins = ['majorguru09@gmail.com', '2024021271@mmmut.ac.in', '2023051154@mmmut.ac.in'];
   const isAuthorizedAdmin = user && (bootstrapAdmins.includes(user.email || '') || userProfile?.role === 'admin');
   
   const [loginError, setLoginError] = useState('');

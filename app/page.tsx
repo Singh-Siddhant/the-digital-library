@@ -44,7 +44,7 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 
-type Tab = 'verification' | 'resources' | 'upload' | 'jobs' | 'users' | 'payments';
+type Tab = 'verification' | 'resources' | 'upload' | 'jobs' | 'users' | 'payments' | 'revenue';
 
 export default function AdminConsoleHome() {
   const { user, userProfile, loading: authLoading, loginWithGoogle, logout } = useAuth();
@@ -112,6 +112,7 @@ export default function AdminConsoleHome() {
   const [pendingPayments, setPendingPayments] = useState<any[]>([]);
   const [paymentActionLoading, setPaymentActionLoading] = useState<string | null>(null);
   const [paymentsFilter, setPaymentsFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
+  const [purchases, setPurchases] = useState<any[]>([]);
 
   const filteredPayments = React.useMemo(() => {
     if (paymentsFilter === 'all') return pendingPayments;
@@ -125,7 +126,7 @@ export default function AdminConsoleHome() {
   const years = ["2025", "2026", "2027", "2028", "2029"];
 
   // Security check
-  const bootstrapAdmins = ['majorguru09@gmail.com', '2024021271@mmmut.ac.in'];
+  const bootstrapAdmins = ['majorguru09@gmail.com', '2024021271@mmmut.ac.in', '2023051154@mmmut.ac.in'];
   const isAuthorizedAdmin = user && (bootstrapAdmins.includes(user.email || '') || userProfile?.role === 'admin');
 
   // Trigger data fetching on authorization and tab switch
@@ -206,12 +207,14 @@ export default function AdminConsoleHome() {
       const qVerified = query(collection(db, 'resources'), where('isVerified', '==', true));
       const qUsers = collection(db, 'users');
       const qPayments = collection(db, 'paymentRequests');
+      const qPurchases = collection(db, 'purchases');
 
-      const [snapPending, snapVerified, snapUsers, snapPayments] = await Promise.all([
+      const [snapPending, snapVerified, snapUsers, snapPayments, snapPurchases] = await Promise.all([
         getDocs(qPending),
         getDocs(qVerified),
         getDocs(qUsers),
-        getDocs(qPayments)
+        getDocs(qPayments),
+        getDocs(qPurchases)
       ]);
 
       setPendingResources(snapPending.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -226,6 +229,8 @@ export default function AdminConsoleHome() {
       const paymentsData = snapPayments.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       paymentsData.sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
       setPendingPayments(paymentsData);
+
+      setPurchases(snapPurchases.docs.map(doc => ({ id: doc.id, ...doc.data() })));
 
       fetchJobsList();
     } catch (err) {
@@ -604,6 +609,258 @@ export default function AdminConsoleHome() {
     }
   };
 
+  // Revenue calculations helper
+  const revenueData = React.useMemo(() => {
+    const approved = pendingPayments.filter(p => p.status === 'approved');
+    const total = approved.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+    
+    // Subscriptions
+    const subPayments = approved.filter(p => p.type === 'membership' || p.planId);
+    const subCost = subPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+    
+    // Single Resource Purchases
+    const resPayments = approved.filter(p => p.type === 'resource' || p.resourceId);
+    const resCost = resPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
+    // Group cumulative timeline
+    const chron = [...approved].sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
+    
+    const dailyMap: { [date: string]: number } = {};
+    chron.forEach(p => {
+      const dateStr = p.createdAt ? p.createdAt.split('T')[0] : 'N/A';
+      dailyMap[dateStr] = (dailyMap[dateStr] || 0) + (Number(p.amount) || 0);
+    });
+
+    const dailyList = Object.keys(dailyMap).map(d => ({
+      date: d,
+      amount: dailyMap[d]
+    })).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    let runningTotal = 0;
+    const timeline = dailyList.map(item => {
+      runningTotal += item.amount;
+      return {
+        date: item.date,
+        amount: item.amount,
+        cumulative: runningTotal
+      };
+    });
+
+    return { total, subCost, resCost, timeline };
+  }, [pendingPayments]);
+
+  const renderLineChart = () => {
+    const data = revenueData.timeline;
+    if (data.length === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center h-48 border border-white/5 bg-white/[0.01] rounded-2xl text-slate-500 text-xs">
+          No approved revenue transactions recorded yet.
+        </div>
+      );
+    }
+
+    const width = 600;
+    const height = 240;
+    const paddingLeft = 60;
+    const paddingRight = 30;
+    const paddingTop = 20;
+    const paddingBottom = 40;
+
+    const chartWidth = width - paddingLeft - paddingRight;
+    const chartHeight = height - paddingTop - paddingBottom;
+
+    const maxVal = Math.max(...data.map(d => d.cumulative), 1000);
+    const minVal = 0;
+
+    const getX = (index: number) => {
+      if (data.length <= 1) return paddingLeft + chartWidth / 2;
+      return paddingLeft + (index / (data.length - 1)) * chartWidth;
+    };
+
+    const getY = (val: number) => {
+      const scale = (val - minVal) / (maxVal - minVal);
+      return height - paddingBottom - scale * chartHeight;
+    };
+
+    // Construct path string
+    let pathD = '';
+    let areaD = `M ${getX(0)} ${height - paddingBottom} `;
+
+    data.forEach((d, i) => {
+      const x = getX(i);
+      const y = getY(d.cumulative);
+      if (i === 0) {
+        pathD += `M ${x} ${y} `;
+      } else {
+        pathD += `L ${x} ${y} `;
+      }
+      areaD += `L ${x} ${y} `;
+    });
+
+    areaD += `L ${getX(data.length - 1)} ${height - paddingBottom} Z`;
+
+    // Grid lines y-axis ticks
+    const yTicks = 4;
+    const ticks = Array.from({ length: yTicks + 1 }, (_, i) => minVal + (i / yTicks) * (maxVal - minVal));
+
+    return (
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto overflow-visible select-none">
+        <defs>
+          <linearGradient id="chartGlow" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#22d3ee" stopOpacity="0.25" />
+            <stop offset="100%" stopColor="#22d3ee" stopOpacity="0.0" />
+          </linearGradient>
+        </defs>
+
+        {/* Grid lines */}
+        {ticks.map((t, idx) => {
+          const y = getY(t);
+          return (
+            <g key={idx}>
+              <line 
+                x1={paddingLeft} 
+                y1={y} 
+                x2={width - paddingRight} 
+                y2={y} 
+                stroke="rgba(255,255,255,0.05)" 
+                strokeDasharray="4 4" 
+              />
+              <text 
+                x={paddingLeft - 10} 
+                y={y + 4} 
+                fill="#64748b" 
+                fontSize="10" 
+                textAnchor="end" 
+                className="font-mono"
+              >
+                ₹{Math.round(t)}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* X Axis Labels */}
+        {data.map((d, i) => {
+          const showLabel = data.length <= 8 || i % Math.ceil(data.length / 5) === 0 || i === data.length - 1;
+          if (!showLabel) return null;
+          const x = getX(i);
+          return (
+            <text 
+              key={i} 
+              x={x} 
+              y={height - paddingBottom + 18} 
+              fill="#64748b" 
+              fontSize="9" 
+              textAnchor="middle" 
+              className="font-mono"
+            >
+              {d.date.substring(5)}
+            </text>
+          );
+        })}
+
+        {/* Area fill */}
+        <path d={areaD} fill="url(#chartGlow)" />
+
+        {/* Line */}
+        <path d={pathD} fill="none" stroke="#22d3ee" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+
+        {/* Points */}
+        {data.map((d, i) => (
+          <circle 
+            key={i} 
+            cx={getX(i)} 
+            cy={getY(d.cumulative)} 
+            r="4.5" 
+            fill="#0f172a" 
+            stroke="#22d3ee" 
+            strokeWidth="2.5" 
+            className="hover:r-6 hover:fill-cyan-400 transition-all cursor-pointer"
+          />
+        ))}
+      </svg>
+    );
+  };
+
+  const renderPieChart = () => {
+    const { subCost, resCost } = revenueData;
+    const total = subCost + resCost;
+    if (total === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center h-48 border border-white/5 bg-white/[0.01] rounded-2xl text-slate-500 text-xs">
+          No breakdown statistics.
+        </div>
+      );
+    }
+
+    const radius = 50;
+    const circ = 2 * Math.PI * radius;
+    const subPercent = (subCost / total) * 100;
+    const resPercent = (resCost / total) * 100;
+
+    const subStroke = (subPercent / 100) * circ;
+    const resStroke = (resPercent / 100) * circ;
+
+    return (
+      <div className="flex flex-col sm:flex-row items-center justify-center gap-8 p-4">
+        <div className="relative w-32 h-32 shrink-0">
+          <svg viewBox="0 0 120 120" className="w-full h-full transform -rotate-90">
+            <circle cx="60" cy="60" r={radius} fill="none" stroke="rgba(255,255,255,0.03)" strokeWidth="12" />
+            <circle 
+              cx="60" 
+              cy="60" 
+              r={radius} 
+              fill="none" 
+              stroke="#22d3ee" 
+              strokeWidth="12" 
+              strokeDasharray={`${subStroke} ${circ}`}
+              strokeDashoffset="0"
+            />
+            {resPercent > 0 && (
+              <circle 
+                cx="60" 
+                cy="60" 
+                r={radius} 
+                fill="none" 
+                stroke="#f97316" 
+                strokeWidth="12" 
+                strokeDasharray={`${resStroke} ${circ}`}
+                strokeDashoffset={-subStroke}
+              />
+            )}
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+            <span className="text-[9px] text-slate-500 uppercase font-bold tracking-wider">Total</span>
+            <span className="text-xs font-bold text-white">₹{total}</span>
+          </div>
+        </div>
+
+        <div className="space-y-3 flex-grow text-xs">
+          <div className="flex items-center justify-between border-b border-white/5 pb-1.5">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 shrink-0" />
+              <span className="text-slate-400 font-semibold">Subscriptions</span>
+            </div>
+            <div className="text-right">
+              <span className="font-bold text-white font-mono">₹{subCost}</span>
+              <span className="text-slate-500 font-mono text-[9px] block">({subPercent.toFixed(1)}%)</span>
+            </div>
+          </div>
+          <div className="flex items-center justify-between border-b border-white/5 pb-1.5">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-orange-500 shrink-0" />
+              <span className="text-slate-400 font-semibold">Paid Volumes</span>
+            </div>
+            <div className="text-right">
+              <span className="font-bold text-white font-mono">₹{resCost}</span>
+              <span className="text-slate-500 font-mono text-[9px] block">({resPercent.toFixed(1)}%)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // Loading state (auth checking)
   if (authLoading) {
     return (
@@ -683,7 +940,7 @@ export default function AdminConsoleHome() {
   }
 
   // Active Tab classes helper
-  const tabClass = (tab: Tab) => `flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${activeTab === tab ? 'bg-cyan-500 text-black shadow-lg shadow-cyan-500/10' : 'text-slate-400 hover:text-white'}`;
+  const tabClass = (tab: Tab) => `flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer shrink-0 ${activeTab === tab ? 'bg-cyan-500 text-black shadow-lg shadow-cyan-500/10' : 'text-slate-400 hover:text-white'}`;
 
   // Authorized Admin View
   return (
@@ -776,12 +1033,15 @@ export default function AdminConsoleHome() {
             <h2 className="text-sm font-bold uppercase tracking-widest text-slate-500">Control Panels</h2>
           </div>
           {/* Core Admin Tab List */}
-          <div className="flex flex-wrap bg-white/5 border border-white/10 rounded-xl p-1 shrink-0 gap-1">
+          <div className="flex overflow-x-auto flex-nowrap md:flex-wrap bg-white/5 border border-white/10 rounded-xl p-1 shrink-0 gap-1 scrollbar-none w-full md:w-auto">
             <button onClick={() => setActiveTab('verification')} className={tabClass('verification')}>
               <FileCheck size={14} /> Pending ({pendingResources.length})
             </button>
             <button onClick={() => setActiveTab('payments')} className={tabClass('payments')}>
               <Coins size={14} /> Payments ({pendingPayments.filter(p => p.status === 'pending').length})
+            </button>
+            <button onClick={() => setActiveTab('revenue')} className={tabClass('revenue')}>
+              <Coins size={14} /> Revenue
             </button>
             <button onClick={() => setActiveTab('resources')} className={tabClass('resources')}>
               <FolderLock size={14} /> Manage Resources ({verifiedResources.length})
@@ -799,7 +1059,7 @@ export default function AdminConsoleHome() {
         </div>
 
         {/* Tab Displays */}
-        {loading && (activeTab === 'verification' || activeTab === 'resources' || activeTab === 'users' || activeTab === 'payments') ? (
+        {loading && (activeTab === 'verification' || activeTab === 'resources' || activeTab === 'users' || activeTab === 'payments' || activeTab === 'revenue') ? (
           <div className="animate-pulse space-y-4">
              <div className="h-24 bg-white/5 rounded-xl border border-white/5" />
              <div className="h-24 bg-white/5 rounded-xl border border-white/5" />
@@ -931,6 +1191,7 @@ export default function AdminConsoleHome() {
                             <th className="p-6">Resource Title / Uploader</th>
                             <th className="p-6">Metadata (Category/Sem)</th>
                             <th className="p-6">Plan Cost</th>
+                            <th className="p-6">Purchased By</th>
                             <th className="p-6">File URL / Download Link</th>
                             <th className="p-6 text-right">Actions</th>
                           </tr>
@@ -1039,6 +1300,16 @@ export default function AdminConsoleHome() {
                                     <span className={`font-bold ${res.isPaid ? 'text-orange-400' : 'text-green-400'}`}>
                                       {res.isPaid ? `PAID (₹${res.price})` : 'FREE'}
                                     </span>
+                                  )}
+                                </td>
+
+                                <td className="p-6 font-mono text-xs">
+                                  {res.isPaid ? (
+                                    <span className="font-bold text-white">
+                                      {purchases.filter(p => p.resourceId === res.id).length} user(s)
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-600">N/A (Free)</span>
                                   )}
                                 </td>
 
@@ -1577,6 +1848,47 @@ export default function AdminConsoleHome() {
                     })}
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* TAB 7: REVENUE OVERVIEW */}
+            {activeTab === 'revenue' && (
+              <div className="space-y-8">
+                <div>
+                  <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                    <Coins className="text-cyan-400" size={20} /> Revenue Dashboard
+                  </h2>
+                  <p className="text-xs text-slate-500">Track and overview verified collection stats, timelines, and payment source contributions.</p>
+                </div>
+
+                <div className="grid lg:grid-cols-3 gap-8">
+                  {/* Left Column: Timeline Cumulative Chart */}
+                  <div className="lg:col-span-2 glass-card p-6 md:p-8 space-y-6 bg-gradient-to-br from-slate-900/60 to-cyan-950/10">
+                    <div className="flex items-center justify-between border-b border-white/5 pb-4">
+                      <div>
+                        <h3 className="text-base font-bold text-white">Cumulative Revenue Growth</h3>
+                        <p className="text-[10px] text-slate-500">Total verified earnings growth tracked over chronological days</p>
+                      </div>
+                      <span className="text-xs font-mono font-bold text-cyan-400">Total: ₹{revenueData.total}.00</span>
+                    </div>
+
+                    <div className="pt-4">
+                      {renderLineChart()}
+                    </div>
+                  </div>
+
+                  {/* Right Column: Breakdown Donut Chart */}
+                  <div className="glass-card p-6 md:p-8 space-y-6 bg-gradient-to-br from-slate-900/60 to-orange-950/10">
+                    <div className="border-b border-white/5 pb-4">
+                      <h3 className="text-base font-bold text-white">Payment Method Share</h3>
+                      <p className="text-[10px] text-slate-500">Subscriptions vs. individual resource volume purchases</p>
+                    </div>
+
+                    <div className="pt-2">
+                      {renderPieChart()}
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 

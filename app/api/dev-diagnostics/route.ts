@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
     }
 
     const email = decodedToken.email || '';
-    const bootstrapAdmins = ['majorguru09@gmail.com', '2024021271@mmmut.ac.in'];
+    const bootstrapAdmins = ['majorguru09@gmail.com', '2024021271@mmmut.ac.in', '2023051154@mmmut.ac.in'];
     
     // Check if the user is a bootstrap admin
     let isAuthorized = bootstrapAdmins.includes(email);
