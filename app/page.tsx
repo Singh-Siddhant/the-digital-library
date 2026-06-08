@@ -559,51 +559,32 @@ export default function AdminConsoleHome() {
   const handlePaymentVerification = async (req: any, approve: boolean) => {
     setPaymentActionLoading(req.id);
     try {
-      const requestRef = doc(db, 'paymentRequests', req.id);
+      const response = await fetch('/api/verify-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestId: req.id, approve })
+      });
+
+      const resData = await response.json();
+      if (!response.ok) {
+        throw new Error(resData.error || 'Server-side activation failed.');
+      }
 
       if (approve) {
-        // 1. Mark request as approved
-        await updateDoc(requestRef, { status: 'approved' });
-
         if (req.type === 'membership') {
-          // Calculate expiry date
-          const today = new Date();
-          let daysToAdd = 30;
-          if (req.planId === 'pro') daysToAdd = 90;
-          if (req.planId === 'annual') daysToAdd = 365;
-          
-          today.setDate(today.getDate() + daysToAdd);
-          const expiryString = today.toISOString().split('T')[0]; // YYYY-MM-DD
-
-          // Upgrade user profile
-          const userRef = doc(db, 'users', req.userId);
-          await setDoc(userRef, {
-            planStatus: 'Paid',
-            expiryDate: expiryString
-          }, { merge: true });
-
-          alert(`Premium Membership activated successfully for ${req.email}! Expiry: ${expiryString}`);
+          alert(`Premium Membership activated successfully for ${req.email}!`);
         } else {
-          // Individual resource access purchase
-          await addDoc(collection(db, 'purchases'), {
-            userId: req.userId,
-            resourceId: req.resourceId,
-            resourceTitle: req.resourceTitle,
-            purchasedAt: new Date().toISOString()
-          });
-
           alert(`Single Resource Access unlocked successfully for ${req.email}!`);
         }
       } else {
-        // Mark request as rejected
-        await updateDoc(requestRef, { status: 'rejected' });
         alert(`Payment reference request rejected for ${req.email}.`);
       }
 
-      setPendingPayments(pendingPayments.filter(p => p.id !== req.id));
+      // Refresh data to reflect purchases, memberships, and payment requests changes
+      fetchAllData();
     } catch (err: any) {
       console.error(err);
-      alert(`Activation error: ${err.message || 'Firestore updates failed.'}`);
+      alert(`Activation error: ${err.message || 'Server-side verification failed.'}`);
     } finally {
       setPaymentActionLoading(null);
     }
