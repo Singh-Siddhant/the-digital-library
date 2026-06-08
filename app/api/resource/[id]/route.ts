@@ -52,18 +52,41 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized: Session invalid' }, { status: 401 });
     }
 
-    const uid = decodedToken.sub;
+    const email = decodedToken.email;
+    if (!email) {
+      return NextResponse.json({ error: 'Unauthorized: Email missing in token' }, { status: 401 });
+    }
 
-    // 2. Fetch User Profile from Firestore to check roles (auto-create if missing)
-    let userDoc = await adminDb.collection('users').doc(uid).get();
-    if (!userDoc.exists) {
-      const bootstrapAdmins = ['majorguru09@gmail.com', '2024021271@mmmut.ac.in'];
-      const isBootstrapAdmin = bootstrapAdmins.includes(decodedToken.email || '');
+    // 2. Fetch User Profile from Firestore to check roles (by email first to align with client-side Firebase Auth UID)
+    let userProfile: any = null;
+    let uid = '';
+
+    const userQuery = await adminDb.collection('users')
+      .where('email', '==', email)
+      .limit(1)
+      .get();
+
+    if (!userQuery.empty) {
+      const userDoc = userQuery.docs[0];
+      userProfile = userDoc.data();
+      uid = userDoc.id;
+    } else {
+      // Auto-create user profile if missing
+      let finalUid = decodedToken.sub;
+      try {
+        const userRecord = await adminAuth.getUserByEmail(email);
+        finalUid = userRecord.uid;
+      } catch (authErr) {
+        console.warn("Could not retrieve Firebase Auth UID by email, falling back to Google sub:", authErr);
+      }
+
+      const bootstrapAdmins = ['majorguru09@gmail.com', '2024021271@mmmut.ac.in', '2023051154@mmmut.ac.in'];
+      const isBootstrapAdmin = bootstrapAdmins.includes(email);
 
       const defaultProfile = {
-        uid: uid,
-        name: decodedToken.name || decodedToken.email?.split('@')[0] || 'Student',
-        email: decodedToken.email || '',
+        uid: finalUid,
+        name: decodedToken.name || email.split('@')[0] || 'Student',
+        email: email,
         picture: decodedToken.picture || '',
         role: isBootstrapAdmin ? 'admin' : 'user',
         batch: 'AI/Cyber Prep',
@@ -72,10 +95,11 @@ export async function GET(
         createdAt: new Date().toISOString()
       };
 
-      await adminDb.collection('users').doc(uid).set(defaultProfile);
-      userDoc = await adminDb.collection('users').doc(uid).get();
+      await adminDb.collection('users').doc(finalUid).set(defaultProfile);
+      uid = finalUid;
+      userProfile = defaultProfile;
     }
-    const userProfile = userDoc.data();
+
     const role = userProfile?.role || 'user';
     const isCyber = role === 'cyber';
     const isAdmin = role === 'admin';
@@ -89,8 +113,14 @@ export async function GET(
 
     // 4. Access Control validation
     if (resource?.isPaid) {
-      // Check if cyber/admin or if purchased
-      if (!isCyber && !isAdmin) {
+      // Check if cyber/admin or if user has active premium subscription or if purchased
+      const isPremiumActive = userProfile?.planStatus === 'Paid' && (
+        !userProfile.expiryDate || 
+        userProfile.expiryDate === 'N/A' || 
+        new Date(userProfile.expiryDate).getTime() > Date.now()
+      );
+
+      if (!isCyber && !isAdmin && !isPremiumActive) {
         const purchaseQuery = await adminDb.collection('purchases')
           .where('userId', '==', uid)
           .where('resourceId', '==', id)

@@ -238,7 +238,7 @@ export default function UserDashboard() {
                     <input
                       required
                       type="text"
-                      placeholder="e.g. Siddhant Singh"
+                      placeholder="e.g. Your Name"
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
                       className="w-full h-12 px-4 bg-[#0A0C16] border border-white/10 rounded-xl text-white outline-none focus:border-cyan-400 transition-all text-xs"
@@ -249,7 +249,7 @@ export default function UserDashboard() {
                     <input
                       required
                       type="text"
-                      placeholder="siddhant_singh"
+                      placeholder="your_name"
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
                       className="w-full h-12 px-4 bg-[#0A0C16] border border-white/10 rounded-xl text-white outline-none focus:border-cyan-400 transition-all font-mono text-xs"

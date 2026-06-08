@@ -20,7 +20,10 @@ import {
   AlertCircle,
   QrCode,
   CheckCircle2,
-  Loader2
+  Loader2,
+  Menu,
+  X,
+  Copy
 } from 'lucide-react';
 import Link from 'next/link';
 import { Suspense } from 'react';
@@ -48,6 +51,7 @@ interface PdfPageProps {
 const PdfPage: React.FC<PdfPageProps> = ({ pdfDoc, pageNumber, scale }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [loading, setLoading] = useState(true);
+  const [viewport, setViewport] = useState<any>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -59,21 +63,23 @@ const PdfPage: React.FC<PdfPageProps> = ({ pdfDoc, pageNumber, scale }) => {
         const page = await pdfDoc.getPage(pageNumber);
         if (cancelled) return;
 
-        const viewport = page.getViewport({ scale });
+        const vp = page.getViewport({ scale });
+        setViewport(vp);
+        
         const canvas = canvasRef.current;
         if (!canvas) return;
 
         const context = canvas.getContext("2d");
         if (!context) return;
 
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
+        canvas.width = vp.width;
+        canvas.height = vp.height;
 
         setLoading(true);
         
         renderTask = page.render({
           canvasContext: context,
-          viewport: viewport
+          viewport: vp
         });
 
         await renderTask.promise;
@@ -106,7 +112,15 @@ const PdfPage: React.FC<PdfPageProps> = ({ pdfDoc, pageNumber, scale }) => {
       )}
       <canvas
         ref={canvasRef}
-        className="max-w-full h-auto rounded border border-white/5 shadow-2xl bg-[#030407] select-none pointer-events-none"
+        style={viewport ? {
+          width: scale > 1.0 ? `${viewport.width}px` : '100%',
+          maxWidth: scale > 1.0 ? 'none' : `${viewport.width}px`,
+          height: scale > 1.0 ? `${viewport.height}px` : 'auto'
+        } : {
+          width: '100%',
+          aspectRatio: '1 / 1.414'
+        }}
+        className="rounded border border-white/5 shadow-2xl bg-[#030407] select-none pointer-events-none mx-auto"
       />
     </div>
   );
@@ -146,6 +160,14 @@ function ExploreContent() {
   const [payLoading, setPayLoading] = useState(false);
   const [paySuccess, setPaySuccess] = useState(false);
   const [payError, setPayError] = useState('');
+  
+  const [copiedUpi, setCopiedUpi] = useState(false);
+  const handleCopyUpi = () => {
+    navigator.clipboard.writeText('6372843175@kotakbank');
+    setCopiedUpi(true);
+    setTimeout(() => setCopiedUpi(false), 2000);
+  };
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   
   // Custom non-blocking security warning toast
   const [securityToast, setSecurityToast] = useState("");
@@ -246,7 +268,7 @@ function ExploreContent() {
         if (!cancelled) {
           console.error("PDF.js loading failed:", err);
           setPdfError(err.message || "Failed to load secure PDF document.");
-          alert("Secure Viewer Error: " + (err.message || err.toString()));
+          showSecurityToast("Secure Viewer Error: " + (err.message || err.toString()));
         }
       } finally {
         if (!cancelled) {
@@ -525,7 +547,8 @@ function ExploreContent() {
               </Link>
             </div>
 
-            <div className="flex items-center gap-8">
+            {/* Desktop Navigation Links */}
+            <div className="hidden md:flex items-center gap-8">
               <Link href="/explore" className="text-sm font-medium text-white transition-colors relative">
                 Explore
                 <span className="absolute -bottom-[22px] left-0 right-0 h-0.5 bg-cyan-400" />
@@ -567,8 +590,101 @@ function ExploreContent() {
                 </Link>
               )}
             </div>
+
+            {/* Mobile Menu Trigger Button */}
+            <div className="flex md:hidden">
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="p-2 text-slate-400 hover:text-white focus:outline-none transition-colors cursor-pointer"
+              >
+                {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+              </button>
+            </div>
           </div>
         </div>
+
+        {/* Mobile Navigation Drawer */}
+        <AnimatePresence>
+          {mobileMenuOpen && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="md:hidden glass-nav border-t border-white/5 overflow-hidden bg-[#0A0C16]/95 backdrop-blur-md"
+            >
+              <div className="px-6 pt-4 pb-6 space-y-4 flex flex-col">
+                <Link 
+                  href="/explore" 
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="text-sm font-semibold text-cyan-400 py-2 border-b border-white/5"
+                >
+                  Explore
+                </Link>
+                <Link 
+                  href="/jobs" 
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="text-sm font-medium text-slate-300 hover:text-white py-2 border-b border-white/5"
+                >
+                  Job Updates
+                </Link>
+                <Link 
+                  href="/premium" 
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="text-sm font-medium text-slate-300 hover:text-white py-2 border-b border-white/5 flex items-center gap-1.5 text-cyan-400"
+                >
+                  <Crown size={14} className="animate-pulse" /> Premium
+                </Link>
+                <Link 
+                  href="/donate" 
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="text-sm font-medium text-slate-300 hover:text-white py-2 border-b border-white/5"
+                >
+                  Support
+                </Link>
+                
+                {user ? (
+                  <div className="pt-2 space-y-4">
+                    <Link 
+                      href="/upload" 
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="flex items-center gap-2 text-sm font-medium text-cyan-400 hover:text-cyan-300 py-1"
+                    >
+                      <Upload size={18} />
+                      <span>Upload Study Module</span>
+                    </Link>
+                    <div className="flex items-center justify-between py-2 border-t border-white/5">
+                      <Link 
+                        href="/dashboard" 
+                        onClick={() => setMobileMenuOpen(false)}
+                        className="flex items-center gap-3"
+                      >
+                        <div className="w-9 h-9 rounded-full bg-slate-800 border border-white/10 flex items-center justify-center text-xs font-bold font-mono text-cyan-400 uppercase">
+                          {userProfile?.name?.substring(0, 2) || 'ST'}
+                        </div>
+                        <span className="text-xs font-bold text-white uppercase tracking-wider">{userProfile?.name || 'My Dashboard'}</span>
+                      </Link>
+                      <button 
+                        onClick={() => { setMobileMenuOpen(false); logout().then(() => router.push('/')); }}
+                        className="p-2 text-slate-500 hover:text-red-400 transition-colors flex items-center gap-1.5 text-xs uppercase font-bold cursor-pointer"
+                      >
+                        <LogOut size={16} /> Sign Out
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <Link 
+                    href="/" 
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="w-full h-11 bg-cyan-500 text-black text-xs font-bold uppercase tracking-wider rounded-lg hover:bg-cyan-400 transition-colors flex items-center justify-center"
+                  >
+                    Login
+                  </Link>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </nav>
 
       {/* Layout Sidebar + Content */}
@@ -671,6 +787,90 @@ function ExploreContent() {
                   className="w-full h-12 bg-white/5 border border-white/10 rounded-full pl-12 pr-6 text-sm focus:border-cyan-400 outline-none transition-all text-slate-200"
                 />
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+              </div>
+            </div>
+
+            {/* Mobile Filters (visible on lg:hidden) */}
+            <div className="lg:hidden space-y-6 bg-white/[0.02] border border-white/5 p-6 rounded-2xl backdrop-blur-md">
+              {/* Category selector */}
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-slate-500 mb-3">Archive Category</p>
+                <div className="flex overflow-x-auto gap-2 pb-2 scrollbar-none -mx-2 px-2 scroll-smooth">
+                  {['All', ...categories].map(cat => (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => handleCategoryChange(cat)}
+                      className={`shrink-0 px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${selectedCategory === cat ? 'bg-cyan-500 text-black shadow-lg shadow-cyan-500/20' : 'bg-white/5 text-slate-400 hover:text-white'}`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Semester Selector (Semester Notes only) */}
+              <AnimatePresence>
+                {selectedCategory === 'Semester Notes' && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="overflow-hidden"
+                  >
+                    <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-slate-500 mb-3">Academic Semester</p>
+                    <div className="flex overflow-x-auto gap-2 pb-2 scrollbar-none -mx-2 px-2 scroll-smooth">
+                      {['All', ...semesters].map(s => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => setSelectedSemester(s)}
+                          className={`shrink-0 px-3.5 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-widest transition-all cursor-pointer ${selectedSemester === s ? 'text-cyan-400 bg-cyan-400/10 border border-cyan-400/20' : 'bg-white/5 text-slate-500'}`}
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Branch Selector (GATE & Semester Notes) */}
+              <AnimatePresence>
+                {(selectedCategory === 'GATE' || selectedCategory === 'Semester Notes') && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="overflow-hidden"
+                  >
+                    <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-slate-500 mb-3">
+                      {selectedCategory === 'GATE' ? 'GATE Branches' : 'Academic Branches'}
+                    </p>
+                    <div className="flex overflow-x-auto gap-2 pb-2 scrollbar-none -mx-2 px-2 scroll-smooth">
+                      {['All', ...branches].map(b => (
+                        <button
+                          key={b}
+                          type="button"
+                          onClick={() => setSelectedBranch(b)}
+                          className={`shrink-0 px-3.5 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-widest transition-all cursor-pointer ${selectedBranch === b ? 'text-cyan-400 bg-cyan-400/10 border border-cyan-400/20' : 'bg-white/5 text-slate-500'}`}
+                        >
+                          {b}
+                        </button>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Resource Type */}
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-slate-500 mb-3">Resource Type</p>
+                <div className="grid grid-cols-3 gap-2">
+                  <button type="button" onClick={() => setSelectedResourceType('All')} className={`py-2 rounded-lg text-[10px] font-bold uppercase transition-all tracking-wider cursor-pointer ${selectedResourceType === 'All' ? 'bg-cyan-500 text-black' : 'bg-white/5 text-slate-500'}`}>All Types</button>
+                  <button type="button" onClick={() => setSelectedResourceType('pyq')} className={`py-2 rounded-lg text-[10px] font-bold uppercase transition-all tracking-wider cursor-pointer ${selectedResourceType === 'pyq' ? 'bg-cyan-500 text-black' : 'bg-white/5 text-slate-500'}`}>PYQ</button>
+                  <button type="button" onClick={() => setSelectedResourceType('note')} className={`py-2 rounded-lg text-[10px] font-bold uppercase transition-all tracking-wider cursor-pointer ${selectedResourceType === 'note' ? 'bg-cyan-500 text-black' : 'bg-white/5 text-slate-500'}`}>Note</button>
+                </div>
               </div>
             </div>
 
@@ -777,8 +977,17 @@ function ExploreContent() {
                   {/* UPI QR display */}
                   <div className="p-4 rounded-xl bg-white/[0.01] border border-white/5 flex items-center gap-4">
                     <QrCode size={70} className="bg-white p-1 rounded text-slate-900 shrink-0" />
-                    <div className="text-xs space-y-1 font-mono text-slate-400">
-                      <div>UPI ID: <strong className="text-white">majorguru09@okaxis</strong></div>
+                    <div className="text-xs space-y-1.5 font-mono text-slate-400">
+                      <div className="flex items-center gap-2">
+                        <span>UPI ID: <strong className="text-white">6372843175@kotakbank</strong></span>
+                        <button
+                          type="button"
+                          onClick={handleCopyUpi}
+                          className="px-2 py-0.5 bg-white/5 border border-white/10 hover:bg-cyan-400 hover:text-black rounded text-[9px] uppercase tracking-wider font-bold transition-all cursor-pointer"
+                        >
+                          {copiedUpi ? 'Copied' : 'Copy'}
+                        </button>
+                      </div>
                       <div>AMOUNT: <strong className="text-cyan-400">₹{payModalResource.price}.00</strong></div>
                       <button 
                         type="button" 
@@ -789,13 +998,16 @@ function ExploreContent() {
                       </button>
                     </div>
                   </div>
+                  <p className="text-[10px] text-amber-400 font-bold uppercase tracking-wider bg-amber-400/5 border border-amber-400/10 p-2.5 rounded-lg leading-relaxed">
+                    ⚠️ Transfer exactly ₹{payModalResource.price}.00 to the UPI ID. Copy-paste the transaction reference ID below.
+                  </p>
 
                   <div className="space-y-1.5">
                     <label className="text-[9px] uppercase font-bold tracking-widest text-slate-500">Your Full Name</label>
                     <input
                       required
                       type="text"
-                      placeholder="Siddhant Singh"
+                      placeholder="Your Name"
                       value={payName}
                       onChange={(e) => setPayName(e.target.value)}
                       className="w-full h-10 px-3 bg-[#030408] border border-white/10 rounded-xl text-white outline-none focus:border-cyan-400 text-xs"
@@ -951,7 +1163,7 @@ function ExploreContent() {
                   ) : (
                     <div 
                       ref={pdfContainerRef}
-                      className="w-full h-full overflow-auto bg-[#030407] flex flex-col items-center p-6 select-none relative scroll-smooth"
+                      className="w-full h-full overflow-auto bg-[#030407] flex flex-col p-6 select-none relative scroll-smooth"
                       onScroll={handlePdfScroll}
                       onContextMenu={(e) => e.preventDefault()}
                     >
@@ -978,7 +1190,7 @@ function ExploreContent() {
                             // Prevent right-click inside the iframe
                             iframeDoc.addEventListener('contextmenu', (evt) => {
                               evt.preventDefault();
-                              alert('Security Lockout: Right-click is disabled on secure academic documents.');
+                              showSecurityToast('Security Lockout: Right-click is disabled on secure academic documents.');
                             });
                             // Prevent keyboard shortcuts inside the iframe
                             iframeDoc.addEventListener('keydown', (evt) => {
@@ -988,19 +1200,19 @@ function ExploreContent() {
 
                               if (ctrlOrCmd && key === 'p') {
                                 evt.preventDefault();
-                                alert('Security Lockout: Printing this secure document is disabled.');
+                                showSecurityToast('Security Lockout: Printing this secure document is disabled.');
                               }
                               if (ctrlOrCmd && key === 's') {
                                 evt.preventDefault();
-                                alert('Security Lockout: Saving this secure document is disabled.');
+                                showSecurityToast('Security Lockout: Saving this secure document is disabled.');
                               }
                               if (ctrlOrCmd && key === 'u') {
                                 evt.preventDefault();
-                                alert('Security Lockout: Viewing source code is disabled.');
+                                showSecurityToast('Security Lockout: Viewing source code is disabled.');
                               }
                               if (evt.key === 'F12' || (ctrlOrCmd && shift && (key === 'i' || key === 'j' || key === 'c'))) {
                                 evt.preventDefault();
-                                alert('Security Lockout: Developer tools are disabled.');
+                                showSecurityToast('Security Lockout: Developer tools are disabled.');
                               }
                             }, true);
                           }

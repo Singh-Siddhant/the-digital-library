@@ -74,6 +74,12 @@ export default function PremiumCheckout() {
   const [error, setError] = useState('');
   const [showQR, setShowQR] = useState(false);
   const [simulatedTxnId, setSimulatedTxnId] = useState('');
+  const [copiedUpi, setCopiedUpi] = useState(false);
+  const handleCopyUpi = () => {
+    navigator.clipboard.writeText('6372843175@okaxis');
+    setCopiedUpi(true);
+    setTimeout(() => setCopiedUpi(false), 2000);
+  };
 
   useEffect(() => {
     if (userProfile?.name && !fullName) {
@@ -369,12 +375,24 @@ export default function PremiumCheckout() {
 
                 <div className="flex-grow space-y-3 text-center md:text-left">
                   <div className="space-y-1">
-                    <span className="text-[10px] uppercase font-mono tracking-widest text-slate-500">PAYEE UPI ID</span>
-                    <p className="text-sm font-mono text-white font-bold tracking-wider">majorguru09@okaxis</p>
+                    <span className="text-[10px] uppercase font-mono tracking-widest text-slate-500 block">PAYEE UPI ID</span>
+                    <div className="flex items-center justify-center md:justify-start gap-2">
+                      <p className="text-sm font-mono text-white font-bold tracking-wider">6372843175@okaxis</p>
+                      <button
+                        type="button"
+                        onClick={handleCopyUpi}
+                        className="px-2.5 py-1 bg-white/5 border border-white/10 hover:bg-cyan-400 hover:text-black rounded text-[9px] uppercase tracking-wider font-bold transition-all cursor-pointer"
+                      >
+                        {copiedUpi ? 'Copied!' : 'Copy'}
+                      </button>
+                    </div>
                   </div>
                   <div className="space-y-1">
                     <span className="text-[10px] uppercase font-mono tracking-widest text-slate-500">PAYMENT VALUE</span>
                     <p className="text-lg font-bold text-cyan-400">INR {selectedPlan.price}.00</p>
+                  </div>
+                  <div className="p-3 bg-amber-400/5 border border-amber-400/10 rounded-xl text-[10px] text-amber-400 font-bold uppercase tracking-wider leading-relaxed">
+                    ⚠️ Plan amount: ₹{selectedPlan.price}.00. Is plan ka exact amount aur payment reference transaction ID transfer ke baad niche form me fill (copy-paste) krna compulsory hai.
                   </div>
                   <div className="flex flex-wrap gap-3 justify-center md:justify-start pt-2">
                     <button
