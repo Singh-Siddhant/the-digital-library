@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
           expiryDate: expiryString
         }, { merge: true });
 
-      } else {
+      } else if (paymentReq?.type === 'resource') {
         // Individual resource access purchase
         await adminDb.collection('purchases').add({
           userId: paymentReq?.userId,

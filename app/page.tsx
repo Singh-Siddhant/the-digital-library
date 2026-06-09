@@ -77,18 +77,18 @@ export default function AdminConsoleHome() {
   // Tab 3: Direct Upload Form states
   const [upTitle, setUpTitle] = useState('');
   const [upDesc, setUpDesc] = useState('');
-  const [upUploadType, setUpUploadType] = useState<'local' | 'drive'>('local');
-  const [upSelectedFile, setUpSelectedFile] = useState<File | null>(null);
+  const [upUploadType, setUpUploadType] = useState<'local' | 'drive'>('drive');
+  // const [upSelectedFile, setUpSelectedFile] = useState<File | null>(null);
   const [upFileUrl, setUpFileUrl] = useState('');
   const [upCategory, setUpCategory] = useState('GATE');
   const [upBranch, setUpBranch] = useState('Computer Science');
   const [upSemester, setUpSemester] = useState('Semester 1');
   const [upResourceType, setUpResourceType] = useState('note'); // note or pyq
-  const [upContentType, setUpContentType] = useState('pdf-local'); // pdf-local, video-local etc
+  const [upContentType, setUpContentType] = useState('pdf-gdrive'); // pdf-local, video-local etc
   const [upIsPaid, setUpIsPaid] = useState(false);
   const [upPrice, setUpPrice] = useState(0);
   const [upLoading, setUpLoading] = useState(false);
-  const [upProgress, setUpProgress] = useState(0);
+  // const [upProgress, setUpProgress] = useState(0);
 
   // Tab 4: Broadcast Jobs Form states
   const [jobTitle, setJobTitle] = useState('');
@@ -356,6 +356,8 @@ export default function AdminConsoleHome() {
   };
 
   // Tab 3 Actions: Direct File Upload
+  // Tab 3 Actions: Direct File Upload
+  /*
   const handleLocalFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -382,6 +384,7 @@ export default function AdminConsoleHome() {
       setUpTitle(parts.join('.'));
     }
   };
+  */
 
   const handleDirectUpload = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -390,12 +393,12 @@ export default function AdminConsoleHome() {
       if (!upFileUrl.includes('drive.google.com') && !upFileUrl.includes('docs.google.com') && !upFileUrl.includes('youtube.com') && !upFileUrl.includes('youtu.be')) {
         return alert('Must be a valid Google Drive, Google Docs, or YouTube link.');
       }
-    } else {
+    } /* else {
       if (!upSelectedFile) return alert('Please select a local file to upload.');
-    }
+    } */
 
     setUpLoading(true);
-    setUpProgress(0);
+    // setUpProgress(0);
 
     try {
       let finalFileUrl = upFileUrl;
@@ -403,6 +406,7 @@ export default function AdminConsoleHome() {
       let finalContentType = upContentType;
 
       // Local file upload
+      /*
       if (upUploadType === 'local' && upSelectedFile) {
         const timestamp = Date.now();
         const safeName = upSelectedFile.name.replace(/[^a-zA-Z0-9.]/g, '_');
@@ -425,12 +429,13 @@ export default function AdminConsoleHome() {
           );
         });
       }
+      */
 
       const docData: any = {
         title: upTitle.trim(),
         description: upDesc.trim(),
         fileUrl: finalFileUrl,
-        fileName: upUploadType === 'local' && upSelectedFile ? upSelectedFile.name : 'Google Drive Asset',
+        fileName: /* upUploadType === 'local' && upSelectedFile ? upSelectedFile.name : */ 'Google Drive Asset',
         storagePath: storagePath,
         category: upCategory,
         resourceType: upResourceType,
@@ -461,7 +466,7 @@ export default function AdminConsoleHome() {
       setUpTitle('');
       setUpDesc('');
       setUpFileUrl('');
-      setUpSelectedFile(null);
+      // setUpSelectedFile(null);
       setUpIsPaid(false);
       setUpPrice(0);
       setActiveTab('resources');
@@ -603,6 +608,10 @@ export default function AdminConsoleHome() {
     const resPayments = approved.filter(p => p.type === 'resource' || p.resourceId);
     const resCost = resPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
+    // Donations
+    const donPayments = approved.filter(p => p.type === 'donation');
+    const donCost = donPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
     // Group cumulative timeline
     const chron = [...approved].sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
     
@@ -627,7 +636,7 @@ export default function AdminConsoleHome() {
       };
     });
 
-    return { total, subCost, resCost, timeline };
+    return { total, subCost, resCost, donCost, timeline };
   }, [pendingPayments]);
 
   const renderLineChart = () => {
@@ -764,8 +773,8 @@ export default function AdminConsoleHome() {
   };
 
   const renderPieChart = () => {
-    const { subCost, resCost } = revenueData;
-    const total = subCost + resCost;
+    const { subCost, resCost, donCost = 0 } = revenueData;
+    const total = subCost + resCost + donCost;
     if (total === 0) {
       return (
         <div className="flex flex-col items-center justify-center h-48 border border-white/5 bg-white/[0.01] rounded-2xl text-slate-500 text-xs">
@@ -778,25 +787,29 @@ export default function AdminConsoleHome() {
     const circ = 2 * Math.PI * radius;
     const subPercent = (subCost / total) * 100;
     const resPercent = (resCost / total) * 100;
+    const donPercent = (donCost / total) * 100;
 
     const subStroke = (subPercent / 100) * circ;
     const resStroke = (resPercent / 100) * circ;
+    const donStroke = (donPercent / 100) * circ;
 
     return (
       <div className="flex flex-col sm:flex-row items-center justify-center gap-8 p-4">
         <div className="relative w-32 h-32 shrink-0">
           <svg viewBox="0 0 120 120" className="w-full h-full transform -rotate-90">
             <circle cx="60" cy="60" r={radius} fill="none" stroke="rgba(255,255,255,0.03)" strokeWidth="12" />
-            <circle 
-              cx="60" 
-              cy="60" 
-              r={radius} 
-              fill="none" 
-              stroke="#22d3ee" 
-              strokeWidth="12" 
-              strokeDasharray={`${subStroke} ${circ}`}
-              strokeDashoffset="0"
-            />
+            {subPercent > 0 && (
+              <circle 
+                cx="60" 
+                cy="60" 
+                r={radius} 
+                fill="none" 
+                stroke="#22d3ee" 
+                strokeWidth="12" 
+                strokeDasharray={`${subStroke} ${circ}`}
+                strokeDashoffset="0"
+              />
+            )}
             {resPercent > 0 && (
               <circle 
                 cx="60" 
@@ -807,6 +820,18 @@ export default function AdminConsoleHome() {
                 strokeWidth="12" 
                 strokeDasharray={`${resStroke} ${circ}`}
                 strokeDashoffset={-subStroke}
+              />
+            )}
+            {donPercent > 0 && (
+              <circle 
+                cx="60" 
+                cy="60" 
+                r={radius} 
+                fill="none" 
+                stroke="#ec4899" 
+                strokeWidth="12" 
+                strokeDasharray={`${donStroke} ${circ}`}
+                strokeDashoffset={-(subStroke + resStroke)}
               />
             )}
           </svg>
@@ -835,6 +860,16 @@ export default function AdminConsoleHome() {
             <div className="text-right">
               <span className="font-bold text-white font-mono">₹{resCost}</span>
               <span className="text-slate-500 font-mono text-[9px] block">({resPercent.toFixed(1)}%)</span>
+            </div>
+          </div>
+          <div className="flex items-center justify-between border-b border-white/5 pb-1.5">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-pink-500 shrink-0" />
+              <span className="text-slate-400 font-semibold">Donations</span>
+            </div>
+            <div className="text-right">
+              <span className="font-bold text-white font-mono">₹{donCost}</span>
+              <span className="text-slate-500 font-mono text-[9px] block">({donPercent.toFixed(1)}%)</span>
             </div>
           </div>
         </div>
@@ -1058,7 +1093,14 @@ export default function AdminConsoleHome() {
                 ) : (
                   <div className="grid gap-6">
                     {pendingResources.map((res) => (
-                      <div key={res.id} className="glass-card p-6 flex flex-col md:flex-row md:items-center justify-between gap-6 border-l-4 border-l-cyan-500">
+                      <div 
+                        key={res.id} 
+                        className={`glass-card p-6 flex flex-col md:flex-row md:items-center justify-between gap-6 border-l-4 ${
+                          res.fileUrl.includes('firebasestorage.googleapis.com') || res.storagePath
+                            ? 'border-white border-l-white shadow-[0_0_20px_rgba(255,255,255,0.08)] bg-white/[0.01]' 
+                            : 'border-l-cyan-500'
+                        }`}
+                      >
                         <div className="flex-grow">
                           <div className="flex items-center gap-3 mb-2">
                             <span className="px-2.5 py-0.5 rounded bg-cyan-400/10 text-cyan-400 text-[9px] font-bold uppercase tracking-wider border border-cyan-400/10">{res.category}</span>
@@ -1182,7 +1224,14 @@ export default function AdminConsoleHome() {
                             const isEditing = editingResId === res.id;
 
                             return (
-                              <tr key={res.id} className="hover:bg-white/[0.01] transition-all">
+                              <tr 
+                                key={res.id} 
+                                className={`transition-all ${
+                                  res.fileUrl.includes('firebasestorage.googleapis.com') || res.storagePath
+                                    ? 'bg-white/[0.02] border-y border-white/20 shadow-[0_0_15px_rgba(255,255,255,0.05)]' 
+                                    : 'hover:bg-white/[0.01]'
+                                }`}
+                              >
                                 <td className="p-6">
                                   {isEditing ? (
                                     <div className="space-y-2 max-w-sm">
@@ -1206,6 +1255,11 @@ export default function AdminConsoleHome() {
                                       <div className="font-bold text-white text-sm mb-1">{res.title}</div>
                                       <div className="text-slate-500 text-[10px] line-clamp-1">{res.description || 'No description provided.'}</div>
                                       <div className="text-slate-600 text-[9px] font-mono mt-1 uppercase">UPLOADER: {res.uploaderName}</div>
+                                      {(res.fileUrl.includes('firebasestorage.googleapis.com') || res.storagePath) && (
+                                        <div className="mt-2 px-2 py-0.5 bg-white/10 text-white rounded text-[8px] font-bold uppercase tracking-wider inline-flex items-center gap-1 border border-white/20 animate-pulse">
+                                          ⚠️ Migrate to Google Drive
+                                        </div>
+                                      )}
                                     </div>
                                   )}
                                 </td>
@@ -1308,7 +1362,18 @@ export default function AdminConsoleHome() {
                                         {res.fileUrl}
                                       </a>
                                       {res.storagePath && (
-                                        <span className="block text-[8px] text-slate-500 font-mono uppercase mt-0.5">STORAGE NODE: {res.storagePath}</span>
+                                        <div className="mt-1 flex flex-col gap-1">
+                                          <span className="block text-[8px] text-slate-500 font-mono uppercase">STORAGE NODE: {res.storagePath}</span>
+                                          <a 
+                                            href={res.fileUrl} 
+                                            download={res.title}
+                                            target="_blank" 
+                                            rel="noreferrer" 
+                                            className="inline-flex items-center gap-1.5 text-[9px] font-bold text-white hover:text-cyan-400 underline uppercase mt-0.5"
+                                          >
+                                            <Download size={10} /> Download for GDrive
+                                          </a>
+                                        </div>
                                       )}
                                     </div>
                                   )}
@@ -1362,26 +1427,28 @@ export default function AdminConsoleHome() {
                     {/* Choose Source Mode */}
                     <div className="space-y-2">
                       <label className="text-[10px] uppercase font-bold tracking-widest text-slate-500">Source Mode</label>
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1">
+                        <button
+                          type="button"
+                          onClick={() => { setUpUploadType('drive'); setUpContentType('pdf-gdrive'); }}
+                          className={`py-2.5 rounded-xl text-xs font-bold uppercase transition-all border cursor-pointer accent-cyan text-white border-cyan-400/50`}
+                        >
+                          Link Google Drive / YouTube (Only Available Mode)
+                        </button>
+                        {/* 
                         <button
                           type="button"
                           onClick={() => { setUpUploadType('local'); setUpContentType('pdf-local'); }}
                           className={`py-2.5 rounded-xl text-xs font-bold uppercase transition-all border cursor-pointer ${upUploadType === 'local' ? 'accent-cyan text-white border-cyan-400/50' : 'bg-white/5 border-white/5 text-slate-500 hover:text-white'}`}
                         >
-                          Local File Upload
+                          Upload File (PDF/Video)
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => { setUpUploadType('drive'); setUpContentType('pdf-gdrive'); }}
-                          className={`py-2.5 rounded-xl text-xs font-bold uppercase transition-all border cursor-pointer ${upUploadType === 'drive' ? 'accent-cyan text-white border-cyan-400/50' : 'bg-white/5 border-white/5 text-slate-500 hover:text-white'}`}
-                        >
-                          External URL Link
-                        </button>
+                        */}
                       </div>
                     </div>
 
                     {/* Local File Selector */}
-                    {upUploadType === 'local' ? (
+                    {/* upUploadType === 'local' ? (
                       <div className="space-y-2">
                         <label className="text-[10px] uppercase font-bold tracking-widest text-slate-500">Physical File</label>
                         <div className="relative border-2 border-dashed border-white/10 hover:border-cyan-400/50 rounded-2xl p-6 flex flex-col items-center justify-center gap-2 transition-all bg-[#0A0C16]/50">
@@ -1408,13 +1475,30 @@ export default function AdminConsoleHome() {
                           )}
                         </div>
                       </div>
-                    ) : (
-                      /* Google Drive URL */
+                    ) : ( */}
+                      {/* Google Drive URL */}
                       <div className="space-y-2">
                         <label className="text-[10px] uppercase font-bold tracking-widest text-slate-500">Google Drive Sharing Link</label>
-                        <input required type="url" placeholder="https://drive.google.com/file/d/..." value={upFileUrl} onChange={(e) => setUpFileUrl(e.target.value)} className="w-full h-12 px-4 bg-[#0A0C16] border border-white/10 rounded-xl text-white outline-none focus:border-cyan-400 font-mono text-xs"/>
+                        <input 
+                          required 
+                          type="url" 
+                          placeholder="https://drive.google.com/file/d/... or https://youtube.com/..." 
+                          value={upFileUrl} 
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setUpFileUrl(val);
+                            if (val.includes('youtube.com') || val.includes('youtu.be')) {
+                              setUpContentType('video-gdrive');
+                            } else if (val.includes('drive.google.com') || val.includes('docs.google.com')) {
+                              if (val.includes('/file/d/')) {
+                                setUpContentType('pdf-gdrive');
+                              }
+                            }
+                          }} 
+                          className="w-full h-12 px-4 bg-[#0A0C16] border border-white/10 rounded-xl text-white outline-none focus:border-cyan-400 font-mono text-xs"
+                        />
                       </div>
-                    )}
+                    {/* ) */}
 
                     <div className="grid md:grid-cols-2 gap-6">
                       <div className="space-y-2">
@@ -1474,7 +1558,7 @@ export default function AdminConsoleHome() {
                     </div>
 
                     {/* Progress tracking display */}
-                    {upLoading && upUploadType === 'local' && (
+                    {/* upLoading && upUploadType === 'local' && (
                       <div className="space-y-2">
                         <div className="flex justify-between text-[10px] font-mono text-cyan-400 font-bold uppercase">
                           <span>Uploading physical file...</span>
@@ -1484,7 +1568,7 @@ export default function AdminConsoleHome() {
                           <div className="h-full bg-cyan-400 shadow-[0_0_8px_#22d3ee] transition-all duration-300" style={{ width: `${upProgress}%` }} />
                         </div>
                       </div>
-                    )}
+                    ) */}
 
                     <button disabled={upLoading} className="w-full h-14 bg-cyan-500 text-black font-bold rounded-xl hover:bg-cyan-400 disabled:opacity-50 flex items-center justify-center gap-2 transition-all shadow-xl shadow-cyan-500/10 cursor-pointer text-xs uppercase tracking-wider">
                       {upLoading ? <Loader2 className="animate-spin" size={16} /> : 'Publish Document Node'}
