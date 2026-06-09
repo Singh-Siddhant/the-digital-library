@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { Suspense } from 'react';
+import YoutubeSecurePlayer from '../components/YoutubeSecurePlayer';
 
 const categories = [
   "GATE", "RRB", "SSC", "CAT", "UPSC", "Placement Prep", "Semester Notes"
@@ -141,6 +142,12 @@ function ExploreContent() {
   const [selectedResourceType, setSelectedResourceType] = useState('All'); // note or pyq
   
   const [viewingResource, setViewingResource] = useState<any>(null);
+  const [isPlayerPip, setIsPlayerPip] = useState(false);
+
+  useEffect(() => {
+    setIsPlayerPip(false);
+  }, [viewingResource]);
+
   const [purchasedResourceIds, setPurchasedResourceIds] = useState<string[]>([]);
 
   // PDF.js Canvas Rendering states
@@ -886,10 +893,22 @@ function ExploreContent() {
                       key={res.id}
                       initial={{ opacity: 0, scale: 0.95 }}
                       animate={{ opacity: 1, scale: 1 }}
-                      className="glass-card p-8 flex flex-col group relative overflow-hidden"
+                      className={`glass-card p-8 flex flex-col group relative overflow-hidden transition-all duration-300 ${
+                        isPaid 
+                          ? isUnlocked 
+                            ? 'border-emerald-500/30 bg-emerald-950/20 hover:border-emerald-500/50 hover:bg-emerald-950/30 shadow-[0_0_15px_rgba(16,185,129,0.05)] hover:shadow-[0_0_20px_rgba(16,185,129,0.1)]'
+                            : 'border-orange-500/20 bg-orange-950/5 hover:border-orange-500/40 hover:bg-orange-950/10 shadow-[0_0_15px_rgba(249,115,22,0.02)] hover:shadow-[0_0_20px_rgba(249,115,22,0.08)]'
+                          : ''
+                      }`}
                     >
                       <div className="flex justify-between items-start mb-6">
-                        <div className="w-10 h-10 rounded-lg bg-cyan-400/10 flex items-center justify-center text-cyan-400">
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all ${
+                          isPaid && isUnlocked 
+                            ? 'bg-emerald-400/10 text-emerald-400' 
+                            : isPaid && !isUnlocked 
+                              ? 'bg-orange-400/10 text-orange-400' 
+                              : 'bg-cyan-400/10 text-cyan-400'
+                        }`}>
                           <BookOpen size={20} />
                         </div>
                         {isPaid && !isUnlocked && (
@@ -897,9 +916,20 @@ function ExploreContent() {
                             <Lock size={10} /> Paid Reference
                           </span>
                         )}
+                        {isPaid && isUnlocked && (
+                          <span className="px-2 py-1 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 rounded text-[9px] font-bold uppercase tracking-wider flex items-center gap-1">
+                            <CheckCircle2 size={10} /> Unlocked
+                          </span>
+                        )}
                       </div>
 
-                      <h3 className="text-lg font-bold text-white mb-3 group-hover:text-cyan-400 transition-colors line-clamp-2">{res.title}</h3>
+                      <h3 className={`text-lg font-bold text-white mb-3 transition-colors line-clamp-2 ${
+                        isPaid && isUnlocked 
+                          ? 'group-hover:text-emerald-400' 
+                          : isPaid && !isUnlocked 
+                            ? 'group-hover:text-orange-400' 
+                            : 'group-hover:text-cyan-400'
+                      }`}>{res.title}</h3>
                       <p className="text-slate-500 text-xs mb-8 line-clamp-3 leading-relaxed">
                         {res.description || 'Verified academic study reference module.'}
                       </p>
@@ -918,7 +948,11 @@ function ExploreContent() {
                         ) : (
                           <button 
                             onClick={() => setViewingResource(res)}
-                            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-cyan-400 text-xs font-bold hover:bg-cyan-400 hover:text-black transition-all cursor-pointer"
+                            className={`flex items-center gap-2 px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-xs font-bold transition-all cursor-pointer ${
+                              isPaid 
+                                ? 'text-emerald-400 hover:bg-emerald-400 hover:text-black hover:border-emerald-400/50' 
+                                : 'text-cyan-400 hover:bg-cyan-400 hover:text-black hover:border-cyan-400/50'
+                            }`}
                           >
                             VIEW SECURE COPY →
                           </button>
@@ -1062,22 +1096,31 @@ function ExploreContent() {
             animate={{ opacity: 1 }} 
             exit={{ opacity: 0 }}
             onContextMenu={(e) => e.preventDefault()}
-            className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-xl flex items-center justify-center p-6 select-none"
-            style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
+            className={isPlayerPip 
+              ? "fixed bottom-6 right-6 z-[100] w-[340px] h-[220px] select-none rounded-2xl overflow-hidden border border-white/20 shadow-2xl transition-all duration-300"
+              : "fixed inset-0 z-[100] bg-black/95 backdrop-blur-xl flex items-center justify-center p-6 select-none transition-all duration-300"
+            }
+            style={isPlayerPip ? {} : { userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
           >
-            <div className="max-w-5xl w-full h-[88vh] glass-card flex flex-col relative overflow-hidden bg-[#05060B]">
-              <button 
-                onClick={() => setViewingResource(null)}
-                className="absolute top-4 right-4 w-10 h-10 bg-white text-black rounded-full flex items-center justify-center hover:bg-slate-200 transition-all shadow-xl z-[110]"
-              >
-                <ChevronLeft size={20} className="rotate-180" />
-              </button>
+            <div className={isPlayerPip 
+              ? "w-full h-full flex flex-col relative overflow-hidden bg-black" 
+              : "max-w-5xl w-full h-[88vh] glass-card flex flex-col relative overflow-hidden bg-[#05060B]"
+            }>
+              {!isPlayerPip && (
+                <button 
+                  onClick={() => setViewingResource(null)}
+                  className="absolute top-4 right-4 w-10 h-10 bg-white text-black rounded-full flex items-center justify-center hover:bg-slate-200 transition-all shadow-xl z-[110]"
+                >
+                  <ChevronLeft size={20} className="rotate-180" />
+                </button>
+              )}
 
-              <div className="p-6 border-b border-white/5 flex flex-col md:flex-row md:items-center justify-between bg-[#070912] gap-4 pr-16">
-                <div>
-                  <h2 className="text-xl font-bold text-white mb-1">{viewingResource.title}</h2>
-                  <p className="text-xs text-slate-500">By {viewingResource.uploaderName || 'Verified Scholar'}</p>
-                </div>
+              {!isPlayerPip && (
+                <div className="p-6 border-b border-white/5 flex flex-col md:flex-row md:items-center justify-between bg-[#070912] gap-4 pr-16">
+                  <div>
+                    <h2 className="text-xl font-bold text-white mb-1">{viewingResource.title}</h2>
+                    <p className="text-xs text-slate-500">By {viewingResource.uploaderName || 'Verified Scholar'}</p>
+                  </div>
 
                 {/* PDF Canvas Toolbar Controls */}
                 {getResourceMediaType(viewingResource) === 'pdf' && pdfDoc && (
@@ -1124,6 +1167,7 @@ function ExploreContent() {
                   </div>
                 )}
               </div>
+            )}
               
               {/* Reader Proxy View Render (Google Drive raw links never exposed) */}
               <div className="flex-1 w-full bg-[#030407] relative overflow-hidden flex items-center justify-center">
@@ -1132,14 +1176,24 @@ function ExploreContent() {
                     {viewingResource.textContent || 'No text content available.'}
                   </div>
                 ) : getResourceMediaType(viewingResource) === 'video' ? (
-                  <div className="w-full h-full flex items-center justify-center p-4">
-                    <video
-                      src={`/api/resource/${viewingResource.id}`}
-                      controls
-                      controlsList="nodownload"
-                      onContextMenu={(e) => e.preventDefault()}
-                      className="max-w-full max-h-full rounded-xl border border-white/5 shadow-2xl"
-                    />
+                  <div className={isPlayerPip ? "w-full h-full flex items-center justify-center" : "w-full h-full flex items-center justify-center p-4"}>
+                    {viewingResource.fileUrl.includes('youtube.com') || viewingResource.fileUrl.includes('youtu.be') ? (
+                      <YoutubeSecurePlayer 
+                        url={viewingResource.fileUrl} 
+                        title={viewingResource.title} 
+                        isPip={isPlayerPip}
+                        onPipToggle={() => setIsPlayerPip(!isPlayerPip)}
+                        onClose={() => setViewingResource(null)}
+                      />
+                    ) : (
+                      <video
+                        src={`/api/resource/${viewingResource.id}`}
+                        controls
+                        controlsList="nodownload"
+                        onContextMenu={(e) => e.preventDefault()}
+                        className="max-w-full max-h-full rounded-xl border border-white/5 shadow-2xl"
+                      />
+                    )}
                   </div>
                 ) : getResourceMediaType(viewingResource) === 'image' ? (
                   <div className="w-full h-full flex items-center justify-center p-4 select-none">

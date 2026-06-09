@@ -2,36 +2,65 @@
 
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Heart, Landmark, Book, Share2, Coffee, Sparkles } from 'lucide-react';
+import { Heart, Landmark, Book, Share2, Coffee, Sparkles, QrCode, CheckCircle2, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '../lib/AuthContext';
+import { collection, addDoc } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 
 export default function Donate() {
   const { user, userProfile } = useAuth();
   const [selectedAmount, setSelectedAmount] = useState('₹500');
+  const [showUpiDetails, setShowUpiDetails] = useState(false);
+  const [copiedUpi, setCopiedUpi] = useState(false);
+  const upiId = '6372843175@okaxis';
+
+  // Form states
+  const [payName, setPayName] = useState('');
+  const [payTxnId, setPayTxnId] = useState('');
+  const [payLoading, setPayLoading] = useState(false);
+  const [paySuccess, setPaySuccess] = useState(false);
+  const [payError, setPayError] = useState('');
+
+  const handleCopyUpi = () => {
+    navigator.clipboard.writeText(upiId);
+    setCopiedUpi(true);
+    setTimeout(() => setCopiedUpi(false), 2000);
+  };
 
   const handleDonate = () => {
-    const numericAmount = parseInt(selectedAmount.replace(/[^\d]/g, ''), 10);
-    if (isNaN(numericAmount)) return;
+    setShowUpiDetails(true);
+  };
 
-    if (typeof window === 'undefined' || !(window as any).Razorpay) {
-      alert("Razorpay checkout is loading, please try again in a few seconds.");
-      return;
+  const handleDonationSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return setPayError('You must login to submit donation details.');
+    if (!payName.trim()) return setPayError('Please enter your full name.');
+    if (!payTxnId.trim()) return setPayError('Please enter your payment reference ID.');
+
+    setPayLoading(true);
+    setPayError('');
+
+    try {
+      const numericAmount = parseInt(selectedAmount.replace(/[^\d]/g, ''), 10);
+      const payload = {
+        userId: user.uid,
+        email: user.email,
+        fullName: payName.trim(),
+        amount: numericAmount,
+        transactionId: payTxnId.trim(),
+        status: 'pending',
+        type: 'donation',
+        createdAt: new Date().toISOString()
+      };
+
+      await addDoc(collection(db, 'paymentRequests'), payload);
+      setPaySuccess(true);
+    } catch (err: any) {
+      setPayError(err.message || 'Failed to submit donation details.');
+    } finally {
+      setPayLoading(false);
     }
-
-    const options = {
-      key: "rzp_test_placeholder",
-      amount: numericAmount * 100,
-      currency: "INR",
-      name: "The Digital Library",
-      description: "Community Support Donation",
-      handler: function (response: any) {
-        alert(`Thank you so much for your generous support of ${selectedAmount}! Your contribution keeps our library alive.`);
-      },
-      theme: { color: "#06b6d4" }
-    };
-    const rzp = new (window as any).Razorpay(options);
-    rzp.open();
   };
 
   return (
@@ -108,12 +137,97 @@ export default function Donate() {
                    </button>
                  ))}
               </div>
-              <button 
-                onClick={handleDonate}
-                className="w-full h-14 bg-white text-black font-bold rounded-xl hover:bg-slate-200 transition-all flex items-center justify-center gap-2 cursor-pointer text-xs uppercase tracking-wider shadow-lg"
-              >
-                 Support with UPI / Card <Landmark size={16} />
-              </button>
+              {!showUpiDetails ? (
+                <button 
+                  onClick={handleDonate}
+                  className="w-full h-14 bg-white text-black font-bold rounded-xl hover:bg-slate-200 transition-all flex items-center justify-center gap-2 cursor-pointer text-xs uppercase tracking-wider shadow-lg"
+                >
+                   Support with UPI <Landmark size={16} />
+                </button>
+              ) : paySuccess ? (
+                <motion.div 
+                  initial={{ scale: 0.95, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  className="w-full p-6 text-center space-y-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl"
+                >
+                  <div className="w-12 h-12 bg-emerald-500 rounded-full flex items-center justify-center mx-auto text-black">
+                    <CheckCircle2 size={24} />
+                  </div>
+                  <h4 className="text-sm font-bold text-white uppercase tracking-wider">Donation Logged</h4>
+                  <p className="text-xs text-slate-400 font-mono">Reference pending admin verification. Thank you for your support! 🙏</p>
+                </motion.div>
+              ) : (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="w-full p-4 rounded-xl bg-white/[0.02] border border-white/5 space-y-4"
+                >
+                  <form onSubmit={handleDonationSubmit} className="space-y-4">
+                    <div className="flex items-center gap-4 text-left">
+                      <div className="w-16 h-16 bg-white rounded-lg flex items-center justify-center p-1 shrink-0 relative">
+                        <QrCode size={56} className="text-slate-900" />
+                      </div>
+                      <div className="space-y-1">
+                        <span className="text-[10px] uppercase font-mono tracking-widest text-slate-500 block">PAYEE UPI ID</span>
+                        <div className="flex items-center gap-2">
+                          <p className="text-xs font-mono text-white font-bold tracking-wider">{upiId}</p>
+                          <button
+                            type="button"
+                            onClick={handleCopyUpi}
+                            className="px-2 py-0.5 bg-white/5 border border-white/10 hover:bg-cyan-400 hover:text-black rounded text-[9px] uppercase tracking-wider font-bold transition-all cursor-pointer"
+                          >
+                            {copiedUpi ? 'Copied' : 'Copy'}
+                          </button>
+                        </div>
+                        <div className="text-xs font-bold text-slate-400 mt-1">
+                          Amount: <span className="text-cyan-400">{selectedAmount}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="p-3 bg-amber-400/5 border border-amber-400/10 rounded-lg text-[9px] text-amber-400 font-bold uppercase tracking-wider leading-relaxed text-center">
+                      ⚠️ Transfer exactly {selectedAmount}.00 to the UPI ID. Fill details below after payment.
+                    </div>
+
+                    <div className="space-y-1.5 text-left">
+                      <label className="text-[9px] uppercase font-bold tracking-widest text-slate-500">Your Full Name</label>
+                      <input
+                        required
+                        type="text"
+                        placeholder="Your Name"
+                        value={payName}
+                        onChange={(e) => setPayName(e.target.value)}
+                        className="w-full h-10 px-3 bg-[#030408] border border-white/10 rounded-xl text-white outline-none focus:border-cyan-400 text-xs"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5 text-left">
+                      <label className="text-[9px] uppercase font-bold tracking-widest text-slate-500">Transaction ID / UPI Reference</label>
+                      <input
+                        required
+                        type="text"
+                        placeholder="Paste UPI Reference Code"
+                        value={payTxnId}
+                        onChange={(e) => setPayTxnId(e.target.value)}
+                        className="w-full h-10 px-3 bg-[#030408] border border-white/10 rounded-xl text-white outline-none focus:border-cyan-400 font-mono text-xs"
+                      />
+                    </div>
+
+                    {payError && (
+                      <div className="flex items-center gap-1.5 text-red-500 font-bold uppercase tracking-wider text-[9px]">
+                        <AlertCircle size={12} /> {payError}
+                      </div>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={payLoading}
+                      className="w-full h-11 bg-cyan-500 text-black font-bold rounded-xl hover:bg-cyan-400 disabled:opacity-50 text-xs uppercase tracking-wider cursor-pointer"
+                    >
+                      {payLoading ? 'Submitting...' : 'Submit Donation Confirmation'}
+                    </button>
+                  </form>
+                </motion.div>
+              )}
             </div>
           </div>
 
@@ -164,8 +278,7 @@ export default function Donate() {
            </div>
         </div>
       </main>
-
-      <script src="https://checkout.razorpay.com/v1/checkout.js" async></script>
+      {/* Razorpay checkout script removed to keep UPI only option */}
     </div>
   );
 }

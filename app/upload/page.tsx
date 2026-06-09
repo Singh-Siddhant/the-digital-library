@@ -27,14 +27,14 @@ export default function ResourceUpload() {
   // Form fields
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [uploadType, setUploadType] = useState<'local' | 'drive'>('local');
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadType, setUploadType] = useState<'local' | 'drive'>('drive');
+  // const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [linkUrl, setLinkUrl] = useState('');
   const [category, setCategory] = useState('GATE');
   const [branch, setBranch] = useState('Computer Science');
   const [semester, setSemester] = useState('Semester 1');
   const [resourceType, setResourceType] = useState('note'); // note or pyq
-  const [contentType, setContentType] = useState('pdf-local'); // pdf-local, pdf-gdrive, video-gdrive etc
+  const [contentType, setContentType] = useState('pdf-gdrive'); // pdf-local, pdf-gdrive, video-gdrive etc
   
   // Status states
   const [loading, setLoading] = useState(false);
@@ -52,6 +52,7 @@ export default function ResourceUpload() {
     }
   }, [user, authLoading, router]);
 
+  /*
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -83,6 +84,7 @@ export default function ResourceUpload() {
       setTitle(nameParts.join('.'));
     }
   };
+  */
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -100,11 +102,11 @@ export default function ResourceUpload() {
       if (!linkUrl.includes('drive.google.com') && !linkUrl.includes('docs.google.com') && !linkUrl.includes('youtube.com') && !linkUrl.includes('youtu.be')) {
         return setError('Validation failed: A valid Google Drive, Google Docs, or YouTube link is required.');
       }
-    } else {
+    } /* else {
       if (!selectedFile) {
         return setError('Please select a local file to upload.');
       }
-    }
+    } */
 
     setLoading(true);
 
@@ -114,6 +116,7 @@ export default function ResourceUpload() {
       let finalContentType = uploadType === 'drive' ? contentType : contentType;
 
       // 1. Upload File if local upload is selected
+      /*
       if (uploadType === 'local' && selectedFile) {
         const timestamp = Date.now();
         const safeFileName = selectedFile.name.replace(/[^a-zA-Z0-9.]/g, '_');
@@ -139,13 +142,14 @@ export default function ResourceUpload() {
           );
         });
       }
+      */
 
       // 2. Save metadata to Firestore
       const docData: any = {
         title: title.trim(),
         description: description.trim(),
         fileUrl: finalFileUrl,
-        fileName: uploadType === 'local' && selectedFile ? selectedFile.name : 'Google Drive Asset',
+        fileName: /* uploadType === 'local' && selectedFile ? selectedFile.name : */ 'Google Drive Asset',
         storagePath: storagePath,
         category,
         resourceType,
@@ -279,7 +283,15 @@ export default function ResourceUpload() {
             {/* Toggle Local Upload vs Link */}
             <div className="space-y-2">
               <label className="text-[10px] uppercase font-bold tracking-widest text-slate-500">Submission Mode</label>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1">
+                <button
+                  type="button"
+                  onClick={() => { setUploadType('drive'); setContentType('pdf-gdrive'); }}
+                  className={`py-2.5 rounded-xl text-xs font-bold uppercase transition-all border cursor-pointer accent-cyan text-white border-cyan-400/50`}
+                >
+                  Link Google Drive / YouTube (Only Available Mode)
+                </button>
+                {/* 
                 <button
                   type="button"
                   onClick={() => { setUploadType('local'); setContentType('pdf-local'); }}
@@ -287,18 +299,12 @@ export default function ResourceUpload() {
                 >
                   Upload File (PDF/Video)
                 </button>
-                <button
-                  type="button"
-                  onClick={() => { setUploadType('drive'); setContentType('pdf-gdrive'); }}
-                  className={`py-2.5 rounded-xl text-xs font-bold uppercase transition-all border cursor-pointer ${uploadType === 'drive' ? 'accent-cyan text-white border-cyan-400/50' : 'bg-white/5 border-white/5 text-slate-500 hover:text-white'}`}
-                >
-                  Link Google Drive / YouTube
-                </button>
+                */}
               </div>
             </div>
 
             {/* Local File Selector */}
-            {uploadType === 'local' ? (
+            {/* uploadType === 'local' ? (
               <div className="space-y-2">
                 <label className="text-[10px] uppercase font-bold tracking-widest text-slate-500">Select Document / Video</label>
                 <div className="relative border-2 border-dashed border-white/10 hover:border-cyan-400/50 rounded-2xl p-8 flex flex-col items-center justify-center gap-3 transition-colors bg-[#0A0C16]/50">
@@ -335,8 +341,8 @@ export default function ResourceUpload() {
                   )}
                 </div>
               </div>
-            ) : (
-              /* Google Drive Link Input */
+            ) : ( */}
+              {/* Google Drive Link Input */}
               <div className="space-y-4">
                 <div className="space-y-2">
                   <label className="text-[10px] uppercase font-bold tracking-widest text-slate-500">Google Drive / YouTube Link</label>
@@ -346,7 +352,17 @@ export default function ResourceUpload() {
                       type="url"
                       placeholder="https://drive.google.com/file/d/... or https://youtube.com/..."
                       value={linkUrl}
-                      onChange={(e) => setLinkUrl(e.target.value)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setLinkUrl(val);
+                        if (val.includes('youtube.com') || val.includes('youtu.be')) {
+                          setContentType('video-gdrive');
+                        } else if (val.includes('drive.google.com') || val.includes('docs.google.com')) {
+                          if (val.includes('/file/d/')) {
+                            setContentType('pdf-gdrive');
+                          }
+                        }
+                      }}
                       className="w-full h-12 pl-12 pr-4 bg-[#0A0C16] border border-white/10 rounded-xl text-white outline-none focus:border-cyan-400 transition-all font-mono text-xs"
                     />
                     <LinkIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600 w-4.5 h-4.5" />
@@ -370,7 +386,7 @@ export default function ResourceUpload() {
                   </select>
                 </div>
               </div>
-            )}
+            {/* ) */}
 
             {/* Title & Category */}
             <div className="grid md:grid-cols-2 gap-6">
@@ -458,7 +474,7 @@ export default function ResourceUpload() {
             )}
 
             {/* Upload Progress Bar */}
-            {loading && uploadType === 'local' && (
+            {/* loading && uploadType === 'local' && (
               <div className="space-y-2">
                 <div className="flex justify-between text-[10px] font-mono text-cyan-400 font-bold uppercase tracking-wider">
                   <span>Uploading File Binaries...</span>
@@ -471,7 +487,7 @@ export default function ResourceUpload() {
                   />
                 </div>
               </div>
-            )}
+            ) */}
 
             <button
               disabled={loading}
@@ -480,7 +496,7 @@ export default function ResourceUpload() {
               {loading ? (
                 <>
                   <Loader2 className="animate-spin" size={16} />
-                  {uploadType === 'local' ? `Uploading File (${progress}%)` : 'Registering metadata...'}
+                  Registering metadata...
                 </>
               ) : (
                 'Submit Module for Verification'

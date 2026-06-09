@@ -23,6 +23,19 @@ export default function RootLayout({
           src="https://accounts.google.com/gsi/client" 
           strategy="afterInteractive" 
         />
+        {/* Google Analytics */}
+        <Script
+          src="https://www.googletagmanager.com/gtag/js?id=G-JDZ2DNMD31"
+          strategy="afterInteractive"
+        />
+        <Script id="google-analytics" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', 'G-JDZ2DNMD31');
+          `}
+        </Script>
       </body>
     </html>
   );
